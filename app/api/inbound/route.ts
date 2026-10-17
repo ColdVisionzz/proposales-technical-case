@@ -1,7 +1,7 @@
 import { Resend } from "resend";
+import { insertEnquiry } from "@/lib/db/enquiries";
 
-// T4 spike: find out what a real inbound email looks like. Logs key names and sizes only, never email content.
-// T6 turns this into the real intake route.
+// Real email intake. The webhook carries no body, so we store the row now and the worker fetches the body later.
 export async function POST(request: Request) {
   const raw = await request.text(); // must be the raw text, the signature breaks on re-serialised JSON
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -22,30 +22,26 @@ export async function POST(request: Request) {
     return new Response("invalid signature", { status: 401 });
   }
 
-  const data = event.data as unknown as Record<string, unknown>;
-  console.log("inbound: verified", {
-    type: event.type,
-    topLevelKeys: Object.keys(event),
-    dataKeys: Object.keys(data),
-    headerNames: [...request.headers.keys()].filter((h) => h.startsWith("svix-")),
-  });
-
-  if (event.type === "email.received") {
-    const { data: email, error } = await resend.emails.receiving.get(data.email_id as string);
-    if (error) {
-      console.error("inbound: fetch of received email failed", { name: error.name, statusCode: error.statusCode });
-    } else {
-      console.log("inbound: fetched email", {
-        keys: Object.keys(email),
-        textIsNull: email.text === null,
-        textChars: email.text?.length ?? 0,
-        htmlChars: email.html?.length ?? 0,
-        hasMessageId: Boolean(email.message_id),
-        headerNames: Object.keys(email.headers ?? {}),
-        webhookMessageIdMatches: email.message_id === data.message_id,
-      });
-    }
+  // Resend sends many event types to this URL. 200 tells it we got the event and it should not retry.
+  if (event.type !== "email.received") {
+    console.log("inbound: ignored event", { type: event.type });
+    return new Response("ignored");
   }
 
-  return new Response("ok");
+  const { email_id, message_id, from, subject } = event.data;
+  try {
+    const { id, created } = await insertEnquiry({
+      messageId: message_id,
+      source: "email",
+      emailId: email_id,
+      subject,
+      sender: from,
+    });
+    console.log("inbound: stored", { id, created });
+    return Response.json({ id, created });
+  } catch (err) {
+    // Not 200: the email is not stored, so Resend must retry the delivery.
+    console.error("inbound: insert failed", { message: err instanceof Error ? err.message : String(err) });
+    return new Response("storage error", { status: 500 });
+  }
 }

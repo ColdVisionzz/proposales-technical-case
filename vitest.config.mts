@@ -3,5 +3,6 @@ import { fileURLToPath } from "node:url";
 
 export default defineConfig({
   resolve: { alias: { "@": fileURLToPath(new URL(".", import.meta.url)) } },
-  test: { include: ["tests/**/*.test.ts"] },
+  // One at a time: the database tests share one Neon test branch and one drops tables under the other.
+  test: { include: ["tests/**/*.test.ts"], fileParallelism: false },
 });
