@@ -1,0 +1,13 @@
+{
+  "error": {
+    "message": "The request could not be validated.",
+    "code": "INVALID_RECIPIENT",
+    "issues": [
+      {
+        "code": "invalid_string",
+        "path": ["recipient", "email"],
+        "message": "Invalid email"
+      }
+    ]
+  }
+}

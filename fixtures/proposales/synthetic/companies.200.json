@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": 1001,
+      "name": "Example Hotel",
+      "currency": "SEK",
+      "tax_mode": "standard",
+      "timezone": "Europe/Stockholm",
+      "discount_decimals": 0,
+      "registration_number": null,
+      "website_url": "https://hotel.example.com",
+      "logo_url": null,
+      "inbox_token": "example-inbox-token",
+      "created_at": 1760000000
+    }
+  ]
+}

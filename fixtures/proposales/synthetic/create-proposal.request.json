@@ -1,0 +1,27 @@
+{
+  "company_id": 1001,
+  "language": "en",
+  "title_md": "Offer for Acme AB: 12 guests, 12 to 13 March",
+  "description_md": "Draft prepared from an enquiry. Please review before sending.",
+  "recipient": {
+    "first_name": "Sam",
+    "last_name": "Example",
+    "email": "sam@acme.example.com",
+    "company_name": "Acme AB"
+  },
+  "data": {
+    "enquiry_key": "11111111-2222-3333-4444-555555555555"
+  },
+  "blocks": [
+    {
+      "type": "product-block",
+      "content_id": 3001,
+      "quantity": 1
+    },
+    {
+      "type": "product-block",
+      "content_id": 3002,
+      "quantity": 12
+    }
+  ]
+}

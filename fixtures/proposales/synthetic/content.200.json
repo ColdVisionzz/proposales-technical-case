@@ -1,0 +1,34 @@
+{
+  "data": [
+    {
+      "created_at": 1760000100,
+      "description": { "en": "Bright meeting room for up to 30 people, projector included." },
+      "deactivated_at": null,
+      "product_id": 2001,
+      "variation_id": 3001,
+      "title": { "en": "Meeting room" },
+      "integration_id": null,
+      "integration_metadata": null
+    },
+    {
+      "created_at": 1760000200,
+      "description": { "en": "Two-course lunch buffet per person." },
+      "deactivated_at": null,
+      "product_id": 2002,
+      "variation_id": 3002,
+      "title": { "en": "Lunch" },
+      "integration_id": null,
+      "integration_metadata": null
+    },
+    {
+      "created_at": 1760000300,
+      "description": { "en": "Standard double room, breakfast included." },
+      "deactivated_at": null,
+      "product_id": 2003,
+      "variation_id": 3003,
+      "title": { "en": "Hotel room" },
+      "integration_id": null,
+      "integration_metadata": null
+    }
+  ]
+}

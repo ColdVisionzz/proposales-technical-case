@@ -7,11 +7,12 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "migrate": "node scripts/stub.mjs migrate T5",
     "eval": "node scripts/stub.mjs eval T22",
-    "probe": "node scripts/stub.mjs probe T3b"
+    "probe": "node scripts/stub.mjs probe T3b",
+    "generate:types": "openapi-typescript fixtures/proposales/openapi.json -o lib/proposales/api-types.ts"
   },
   "dependencies": {
     "next": "16.4.2",
@@ -23,8 +24,11 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "ajv": "^8.20.0",
+    "ajv-formats": "^3.0.1",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.12"

@@ -1,0 +1,2422 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Proposales API",
+    "version": "2026.09.02",
+    "description": "Create and manage Proposales content, companies, templates, proposals, attachments, and inbound requests. All monetary values are represented in the smallest currency unit unless an operation states otherwise.",
+    "contact": {
+      "name": "Proposales Support",
+      "url": "https://help.proposales.com"
+    }
+  },
+  "externalDocs": {
+    "description": "Proposales API documentation",
+    "url": "https://docs.proposales.com/api-reference/introduction"
+  },
+  "servers": [
+    {
+      "url": "https://api.proposales.com",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Attachments",
+      "description": "Files available in the content library."
+    },
+    {
+      "name": "Companies",
+      "description": "Companies and their proposal templates."
+    },
+    {
+      "name": "Content",
+      "description": "Products and videos in the content library."
+    },
+    {
+      "name": "Proposals",
+      "description": "Proposal drafts, versions, metadata, and search."
+    },
+    {
+      "name": "Inbox",
+      "description": "Public requests for proposals."
+    }
+  ],
+  "paths": {
+    "/v1/attachments": {
+      "get": {
+        "operationId": "listAttachments",
+        "summary": "List attachments",
+        "description": "Returns attachments available to the authenticated user. Optionally limits the result to one accessible company.",
+        "tags": ["Attachments"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/attachments/list"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CompanyIdQuery"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Attachments available to the user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AttachmentListItem"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v1/inbox/{token}": {
+      "post": {
+        "operationId": "createRequestForProposal",
+        "summary": "Create a request for proposal",
+        "description": "Creates an inbound request for proposal for the inbox identified by the path token. This public operation accepts JSON, URL-encoded forms, or multipart form data. Unknown form fields are retained as proposal metadata.",
+        "tags": ["Inbox"],
+        "security": [],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/inbox/create-rfp"
+        },
+        "parameters": [
+          {
+            "name": "token",
+            "in": "path",
+            "required": true,
+            "description": "Public inbox token for the receiving company.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "Contact details and request metadata.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfpRequest"
+              }
+            },
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfpRequest"
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRfpRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Request created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateRfpResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/companies": {
+      "get": {
+        "operationId": "listCompanies",
+        "summary": "List companies",
+        "description": "Returns every company the authenticated user is an active member of.",
+        "tags": ["Companies"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/companies/list"
+        },
+        "responses": {
+          "200": {
+            "description": "Companies available to the user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Company"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/companies/{companyId}/templates": {
+      "get": {
+        "operationId": "listCompanyTemplates",
+        "summary": "List company templates",
+        "description": "Returns active proposal templates for a company the authenticated user can access.",
+        "tags": ["Companies"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/companies/%5BcompanyId%5D/templates"
+        },
+        "parameters": [
+          {
+            "name": "companyId",
+            "in": "path",
+            "required": true,
+            "description": "Numeric company identifier.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposal templates for the company.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ProposalTemplate"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/content": {
+      "get": {
+        "operationId": "listContent",
+        "summary": "List content",
+        "description": "Returns products and videos from the content library. Product and variation filters may be comma-separated. Detailed image data is included when filtering by variation ID.",
+        "tags": ["Content"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/content/list"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CompanyIdQuery"
+          },
+          {
+            "name": "external_id",
+            "in": "query",
+            "description": "Integration unique identifier or Oracle product code. Requires company_id unless the request is scoped by variation_id or by a product_id that resolves for this token.",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          {
+            "name": "variation_id",
+            "in": "query",
+            "description": "One variation ID or a comma-separated list of variation IDs.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(,[0-9]+)*$",
+              "example": "789,101112"
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "description": "One product ID or a comma-separated list of product IDs.",
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+(,[0-9]+)*$",
+              "example": "123,456"
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "description": "Include archived content and its is_archived field.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "include_sources",
+            "in": "query",
+            "description": "Include integration source metadata.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Content matching the supplied filters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/ContentItem"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createOrRestoreContent",
+        "summary": "Create or restore content",
+        "description": "Creates one content item when action is omitted. When action=restore, restores the archived products selected by product_ids or variation_ids. The request schema depends on the action parameter.",
+        "tags": ["Content"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/content/create"
+        },
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Set to restore to restore archived content. Omit to create content.",
+            "schema": {
+              "type": "string",
+              "enum": ["restore"]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "description": "A content item when action is omitted, or a set of IDs when action=restore.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/CreateContentRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/BulkContentRequest"
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Archived content restored when action=restore.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkRestoreResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Content item created when action is omitted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "put": {
+        "operationId": "updateContent",
+        "summary": "Update content",
+        "description": "Updates an active or archived content item selected by product_id or variation_id.",
+        "tags": ["Content"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/content/update"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateContentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Content item updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ContentMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "archiveContent",
+        "summary": "Archive content",
+        "description": "Archives one item when product_id or variation_id is supplied. When action=bulk, archives every accessible product selected in the JSON body. Both forms are idempotent.",
+        "tags": ["Content"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/content/delete"
+        },
+        "parameters": [
+          {
+            "name": "action",
+            "in": "query",
+            "description": "Set to bulk to select multiple items from the request body.",
+            "schema": {
+              "type": "string",
+              "enum": ["bulk"]
+            }
+          },
+          {
+            "name": "variation_id",
+            "in": "query",
+            "description": "Variation to archive when action is omitted. Either variation_id or product_id is required for a single-item request.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          {
+            "name": "product_id",
+            "in": "query",
+            "description": "Product to archive when action is omitted. Either product_id or variation_id is required for a single-item request.",
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": false,
+          "description": "Required only when action=bulk.",
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkContentRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Content archived. A bulk request returns BulkArchiveResponse; a single-item request returns ArchiveContentResponse.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ArchiveContentResponse"
+                    },
+                    {
+                      "$ref": "#/components/schemas/BulkArchiveResponse"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/proposals": {
+      "post": {
+        "operationId": "createProposal",
+        "summary": "Create proposal",
+        "description": "Creates a new proposal series with an editable draft.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/create"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProposalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Proposal draft created.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/proposals/{uuid}": {
+      "parameters": [
+        {
+          "$ref": "#/components/parameters/ProposalUuidPath"
+        }
+      ],
+      "get": {
+        "operationId": "getProposal",
+        "summary": "Get proposal",
+        "description": "Returns a proposal by UUID when the authenticated user belongs to its company.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/get"
+        },
+        "responses": {
+          "200": {
+            "description": "Proposal details.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Proposal"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "post": {
+        "operationId": "createProposalVersion",
+        "summary": "Create proposal version",
+        "description": "Creates or updates the next draft version in the same proposal series. Repeated calls return the same draft until that draft is sent or archived. company_id and language are required by the API.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/new-version"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateProposalVersionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft version created or updated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      },
+      "patch": {
+        "operationId": "updateProposalDraft",
+        "summary": "Update proposal draft",
+        "description": "Partially updates a draft or template in place. The body must contain company_id and at least one field to update. Blocks replace the full ordered block list when supplied.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/patch-draft"
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProposalDraftRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Draft updated in place.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProposalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "409": {
+            "$ref": "#/components/responses/Conflict"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/proposals/{uuid}/data": {
+      "patch": {
+        "operationId": "updateProposalData",
+        "summary": "Update proposal data",
+        "description": "Shallow-merges keys into the proposal data object. A null value removes its key; omitted keys remain unchanged.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/patch-data"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ProposalUuidPath"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["data"],
+                "properties": {
+                  "data": {
+                    "$ref": "#/components/schemas/ProposalData"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated proposal data.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/ProposalData"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "403": {
+            "$ref": "#/components/responses/Forbidden"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    },
+    "/v3/proposal-search": {
+      "get": {
+        "operationId": "searchProposals",
+        "summary": "Search proposals",
+        "description": "Returns up to 25 proposals ordered by updated_at descending. Any query parameter named filter[property] matches that property in the proposal data object.",
+        "tags": ["Proposals"],
+        "externalDocs": {
+          "url": "https://docs.proposales.com/api-reference/proposals/search"
+        },
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/CompanyIdQuery"
+          },
+          {
+            "name": "filter[property_name]",
+            "in": "query",
+            "description": "Example metadata filter. Replace property_name with a key from the proposal data object.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "recipient_email",
+            "in": "query",
+            "description": "Case-insensitive exact recipient email filter.",
+            "schema": {
+              "type": "string",
+              "format": "email"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Maximum number of proposals to return.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 25,
+              "default": 1
+            }
+          },
+          {
+            "name": "exclude_revision_drafts",
+            "in": "query",
+            "description": "Exclude draft revisions from series that already have recipient tokens.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          {
+            "name": "include_archived",
+            "in": "query",
+            "description": "Include archived proposals.",
+            "schema": {
+              "type": "boolean",
+              "default": false
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Matching proposals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["data"],
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "maxItems": 25,
+                      "items": {
+                        "$ref": "#/components/schemas/ProposalSearchResult"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "500": {
+            "$ref": "#/components/responses/ServerError"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Proposales API token. Send it as Authorization: Bearer <token>."
+      }
+    },
+    "parameters": {
+      "CompanyIdQuery": {
+        "name": "company_id",
+        "in": "query",
+        "description": "Limit results to a company available to the API token.",
+        "schema": {
+          "type": "integer",
+          "format": "int64",
+          "minimum": 1
+        }
+      },
+      "ProposalUuidPath": {
+        "name": "uuid",
+        "in": "path",
+        "required": true,
+        "description": "Proposal UUID.",
+        "schema": {
+          "type": "string",
+          "format": "uuid"
+        }
+      }
+    },
+    "responses": {
+      "BadRequest": {
+        "description": "The request could not be validated or is missing required data.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "The API token is missing or invalid, or the user cannot access the resource.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Forbidden": {
+        "description": "The authenticated API role does not have permission to perform this operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "The requested resource does not exist or is not available to the caller.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "Conflict": {
+        "description": "The resource is in a state that does not permit this operation.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      },
+      "ServerError": {
+        "description": "The server could not complete the request.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/ErrorResponse"
+            }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "ErrorResponse": {
+        "type": "object",
+        "required": ["error"],
+        "additionalProperties": false,
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["message"],
+            "additionalProperties": false,
+            "properties": {
+              "message": {
+                "type": "string",
+                "description": "Human-readable error message."
+              },
+              "code": {
+                "type": "string",
+                "description": "Stable machine-readable error code, when the error has one (e.g. `INVALID_RECIPIENT`, `INVALID_CONTACT_EMAIL`)."
+              },
+              "issues": {
+                "type": "array",
+                "description": "Per-field validation issues when request validation fails.",
+                "items": {
+                  "type": "object",
+                  "required": ["code", "path", "message"],
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "path": {
+                      "type": "array",
+                      "items": {
+                        "oneOf": [
+                          {
+                            "type": "string"
+                          },
+                          {
+                            "type": "integer"
+                          }
+                        ]
+                      }
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "AttachmentListItem": {
+        "type": "object",
+        "required": ["id", "created_at", "filename"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Attachment identifier."
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Creation time as a Unix timestamp."
+          },
+          "filename": {
+            "type": "string",
+            "description": "Original filename."
+          }
+        }
+      },
+      "Company": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "currency",
+          "tax_mode",
+          "timezone",
+          "discount_decimals",
+          "created_at"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "name": {
+            "type": "string"
+          },
+          "currency": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 3,
+            "example": "EUR"
+          },
+          "tax_mode": {
+            "$ref": "#/components/schemas/TaxMode"
+          },
+          "timezone": {
+            "type": "string",
+            "example": "Europe/Stockholm"
+          },
+          "discount_decimals": {
+            "$ref": "#/components/schemas/DiscountDecimals"
+          },
+          "registration_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "website_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "logo_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "inbox_token": {
+            "type": "string",
+            "nullable": true
+          },
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "ProposalTemplate": {
+        "type": "object",
+        "required": ["uuid", "language"],
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2
+          },
+          "background_image_uuid": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          }
+        }
+      },
+      "LocalizedText": {
+        "type": "object",
+        "description": "Text keyed by language code.",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "example": {
+          "en": "Meeting room"
+        }
+      },
+      "ContentImage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uuid": {
+            "type": "string"
+          },
+          "filename": {
+            "type": "string",
+            "nullable": true
+          },
+          "mime_type": {
+            "type": "string",
+            "nullable": true
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "height": {
+            "type": "integer",
+            "nullable": true
+          },
+          "width": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "ContentItem": {
+        "type": "object",
+        "required": [
+          "created_at",
+          "description",
+          "product_id",
+          "variation_id",
+          "title"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64",
+            "description": "Creation time as a Unix timestamp."
+          },
+          "description": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "deactivated_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true,
+            "description": "Archive time as a Unix timestamp, or null for active content."
+          },
+          "product_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "variation_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "$ref": "#/components/schemas/LocalizedText"
+          },
+          "is_archived": {
+            "type": "boolean",
+            "description": "Included only when include_archived=true."
+          },
+          "sources": {
+            "type": "object",
+            "description": "Included only when include_sources=true.",
+            "additionalProperties": true
+          },
+          "images": {
+            "type": "array",
+            "description": "Included for detailed variation queries.",
+            "items": {
+              "$ref": "#/components/schemas/ContentImage"
+            }
+          },
+          "integration_id": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "integration_metadata": {
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          }
+        }
+      },
+      "ContentImageInput": {
+        "type": "object",
+        "required": ["uuid"],
+        "additionalProperties": false,
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "description": "Uploadcare UUID, or an empty string when url is supplied."
+          },
+          "filename": {
+            "type": "string"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Public image URL used when uuid is empty."
+          },
+          "size": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "height": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "width": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "CreateContentRequest": {
+        "type": "object",
+        "required": ["company_id", "language", "title"],
+        "additionalProperties": false,
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2,
+            "example": "en"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentImageInput"
+            }
+          }
+        }
+      },
+      "UpdateContentRequest": {
+        "type": "object",
+        "required": ["language"],
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": ["variation_id"]
+          },
+          {
+            "required": ["product_id"]
+          }
+        ],
+        "properties": {
+          "variation_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "product_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "language": {
+            "type": "string",
+            "minLength": 2
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "description": {
+            "type": "string"
+          },
+          "images": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ContentImageInput"
+            }
+          }
+        }
+      },
+      "BulkContentRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "anyOf": [
+          {
+            "required": ["variation_ids"]
+          },
+          {
+            "required": ["product_ids"]
+          }
+        ],
+        "properties": {
+          "variation_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          },
+          "product_ids": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        }
+      },
+      "ContentMutationResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["product_id", "variation_id", "message"],
+            "properties": {
+              "product_id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "variation_id": {
+                "type": "integer",
+                "format": "int64"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "ArchiveContentResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["success", "message"],
+            "properties": {
+              "success": {
+                "type": "boolean"
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "BulkArchiveResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["archived_count", "product_ids", "message"],
+            "properties": {
+              "archived_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "product_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "BulkRestoreResponse": {
+        "type": "object",
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "object",
+            "required": ["restored_count", "product_ids", "message"],
+            "properties": {
+              "restored_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "product_ids": {
+                "type": "array",
+                "items": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "AssetReference": {
+        "type": "object",
+        "required": ["id", "uuid"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "uuid": {
+            "type": "string"
+          }
+        }
+      },
+      "RecipientInput": {
+        "anyOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int64"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "first_name": {
+                "type": "string"
+              },
+              "last_name": {
+                "type": "string"
+              },
+              "email": {
+                "type": "string",
+                "format": "email"
+              },
+              "phone": {
+                "type": "string"
+              },
+              "company_name": {
+                "type": "string"
+              },
+              "sources": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
+      },
+      "ProposalAttachmentInput": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id"],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "type": "integer",
+                "format": "int64"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": ["mime_type", "name", "url"],
+            "additionalProperties": false,
+            "properties": {
+              "mime_type": {
+                "type": "string",
+                "enum": ["text/html", "application/pdf"]
+              },
+              "name": {
+                "type": "string"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        ]
+      },
+      "ProposalAttachment": {
+        "type": "object",
+        "required": ["id", "mime_type", "name", "uuid"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "mime_type": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "TaxMode": {
+        "type": "string",
+        "enum": ["standard", "simplified", "tax-free", "none"]
+      },
+      "TaxOptions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/TaxMode"
+          },
+          "tax_included": {
+            "type": "boolean"
+          },
+          "tax_label_key": {
+            "type": "string"
+          }
+        }
+      },
+      "DiscountDecimals": {
+        "type": "integer",
+        "enum": [0, 1, 2],
+        "description": "How many decimals the discount badge shows, e.g. 12.5% displays as -13% with 0, -12.5% with 1 or 2. Trailing zeros are hidden. New proposals inherit the company's setting; new versions keep the source proposal's setting.",
+        "example": 1
+      },
+      "InvoicingInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "data_prefill": {
+            "description": "Prefill data consumed by the configured invoicing form.",
+            "type": "object",
+            "nullable": true,
+            "additionalProperties": true
+          }
+        }
+      },
+      "ProposalData": {
+        "type": "object",
+        "description": "Integration-defined proposal metadata. Values may be nested and null removes a key during a data patch.",
+        "additionalProperties": true
+      },
+      "ProposalLineageInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "created_from_rfp": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "created_from_template": {
+            "type": "string",
+            "format": "uuid"
+          }
+        }
+      },
+      "PackageSplit": {
+        "type": "object",
+        "required": ["type"],
+        "properties": {
+          "enable_discount": {
+            "type": "boolean"
+          },
+          "fixed": {
+            "type": "boolean"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["accommodation", "meetingRoom", "food", "other"]
+          },
+          "value_saved_with_tax": {
+            "type": "boolean"
+          },
+          "value_with_tax": {
+            "type": "number"
+          },
+          "value_without_tax": {
+            "type": "number"
+          },
+          "vat": {
+            "type": "number"
+          }
+        }
+      },
+      "MultiProductSubrow": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "content_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "label": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "value": {
+            "type": "number"
+          },
+          "valueWithTax": {
+            "type": "number"
+          },
+          "tax_rate": {
+            "type": "number"
+          },
+          "percent_discount": {
+            "type": "number"
+          },
+          "included": {
+            "type": "boolean"
+          },
+          "integration": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "MultiProductRow": {
+        "type": "object",
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "dateFrom": {
+            "type": "string"
+          },
+          "dateTo": {
+            "type": "string"
+          },
+          "discount": {
+            "type": "number"
+          },
+          "fixed_discount": {
+            "type": "number"
+          },
+          "occupancy": {
+            "type": "number"
+          },
+          "label": {
+            "type": "string"
+          },
+          "notes": {
+            "type": "string"
+          },
+          "setup": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "subrows": {
+            "type": "array",
+            "nullable": true,
+            "items": {
+              "$ref": "#/components/schemas/MultiProductSubrow"
+            }
+          },
+          "unitValueWithDiscountWithoutTax": {
+            "type": "number"
+          },
+          "unitValueWithDiscountWithTax": {
+            "type": "number"
+          },
+          "unitValueWithoutDiscountWithoutTax": {
+            "type": "number"
+          },
+          "unitValueWithoutDiscountWithTax": {
+            "type": "number"
+          }
+        }
+      },
+      "ProposalBlockInput": {
+        "type": "object",
+        "properties": {
+          "content_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["product-block", "video-block"]
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Preserves editor-owned changes when updating an existing block."
+          },
+          "video_url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "title": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "image_uuids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "currency": {
+            "type": "string"
+          },
+          "quantity": {
+            "type": "number"
+          },
+          "quantity_editable": {
+            "type": "boolean"
+          },
+          "optional": {
+            "type": "boolean"
+          },
+          "package_split": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PackageSplit"
+            }
+          },
+          "multi_product_enabled": {
+            "type": "boolean"
+          },
+          "multi_product_data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/MultiProductRow"
+            }
+          },
+          "unit_value_with_discount_with_tax": {
+            "type": "number"
+          },
+          "unit_value_with_discount_without_tax": {
+            "type": "number"
+          },
+          "unit_value_without_discount_with_tax": {
+            "type": "number"
+          },
+          "unit_value_without_discount_without_tax": {
+            "type": "number"
+          }
+        }
+      },
+      "ProposalBlock": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ProposalBlockInput"
+          },
+          {
+            "type": "object",
+            "required": ["type", "uuid"],
+            "properties": {
+              "updated_at": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "format": "int64"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              },
+              "optional_picked": {
+                "type": "boolean"
+              },
+              "recurring": {
+                "type": "boolean"
+              },
+              "sources": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        ]
+      },
+      "CreateProposalRequest": {
+        "type": "object",
+        "required": ["company_id", "language"],
+        "additionalProperties": false,
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "language": {
+            "type": "string",
+            "minLength": 1,
+            "example": "en"
+          },
+          "creator_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "background_image": {
+            "$ref": "#/components/schemas/AssetReference"
+          },
+          "background_video": {
+            "$ref": "#/components/schemas/AssetReference"
+          },
+          "title_md": {
+            "type": "string"
+          },
+          "description_md": {
+            "type": "string"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/RecipientInput"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProposalData"
+          },
+          "tracking": {
+            "$ref": "#/components/schemas/ProposalLineageInput"
+          },
+          "invoicing_enabled": {
+            "type": "boolean"
+          },
+          "invoicing": {
+            "$ref": "#/components/schemas/InvoicingInput"
+          },
+          "tax_options": {
+            "$ref": "#/components/schemas/TaxOptions"
+          },
+          "discount_decimals": {
+            "$ref": "#/components/schemas/DiscountDecimals"
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalBlockInput"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalAttachmentInput"
+            }
+          }
+        }
+      },
+      "CreateProposalVersionRequest": {
+        "$ref": "#/components/schemas/CreateProposalRequest"
+      },
+      "UpdateProposalDraftRequest": {
+        "type": "object",
+        "required": ["company_id"],
+        "minProperties": 2,
+        "additionalProperties": false,
+        "properties": {
+          "company_id": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 1
+          },
+          "language": {
+            "type": "string"
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email"
+          },
+          "background_image": {
+            "$ref": "#/components/schemas/AssetReference"
+          },
+          "background_video": {
+            "$ref": "#/components/schemas/AssetReference"
+          },
+          "title_md": {
+            "type": "string"
+          },
+          "description_md": {
+            "type": "string"
+          },
+          "recipient": {
+            "$ref": "#/components/schemas/RecipientInput"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProposalData"
+          },
+          "invoicing_enabled": {
+            "type": "boolean"
+          },
+          "invoicing": {
+            "$ref": "#/components/schemas/InvoicingInput"
+          },
+          "tax_options": {
+            "$ref": "#/components/schemas/TaxOptions"
+          },
+          "discount_decimals": {
+            "$ref": "#/components/schemas/DiscountDecimals"
+          },
+          "blocks": {
+            "type": "array",
+            "description": "Complete ordered replacement list. title, description, and image_uuids are ignored by this operation.",
+            "items": {
+              "$ref": "#/components/schemas/ProposalBlockInput"
+            }
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalAttachmentInput"
+            }
+          }
+        }
+      },
+      "ProposalMutationResponse": {
+        "type": "object",
+        "required": ["proposal"],
+        "properties": {
+          "proposal": {
+            "type": "object",
+            "required": ["uuid", "url"],
+            "properties": {
+              "uuid": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "url": {
+                "type": "string",
+                "format": "uri"
+              }
+            }
+          }
+        }
+      },
+      "ProposalStatus": {
+        "type": "string",
+        "nullable": true,
+        "enum": [
+          "accepted",
+          "replaced",
+          "active",
+          "draft",
+          "expired",
+          "rejected",
+          "template",
+          "withdrawn"
+        ]
+      },
+      "ProposalSearchResult": {
+        "type": "object",
+        "required": [
+          "created_at",
+          "updated_at",
+          "title",
+          "uuid",
+          "series_uuid",
+          "company_id",
+          "version",
+          "status",
+          "data",
+          "url"
+        ],
+        "properties": {
+          "created_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string"
+          },
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "series_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "version": {
+            "type": "integer",
+            "nullable": true
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProposalData"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "Proposal": {
+        "type": "object",
+        "required": [
+          "uuid",
+          "company_id",
+          "language",
+          "status",
+          "data",
+          "blocks",
+          "attachments"
+        ],
+        "properties": {
+          "uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "series_uuid": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "company_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "title": {
+            "type": "string",
+            "nullable": true
+          },
+          "title_md": {
+            "type": "string",
+            "nullable": true
+          },
+          "description_html": {
+            "type": "string",
+            "nullable": true,
+            "description": "HTML rendered from `description_md`. Any HTML in the text is escaped, so the only markup is the paragraphs, line breaks, bold and headings that the formatting produces."
+          },
+          "description_md": {
+            "type": "string",
+            "nullable": true
+          },
+          "archived_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "attachments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalAttachment"
+            }
+          },
+          "background_image": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AssetReference"
+              }
+            ],
+            "nullable": true
+          },
+          "background_video": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/AssetReference"
+              }
+            ],
+            "nullable": true
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ProposalBlock"
+            }
+          },
+          "company_address": {
+            "type": "string",
+            "nullable": true
+          },
+          "company_email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "company_logo_uuid": {
+            "type": "string",
+            "nullable": true
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "company_phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "company_registration_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "company_tax_mode_live": {
+            "$ref": "#/components/schemas/TaxMode"
+          },
+          "company_timezone": {
+            "type": "string"
+          },
+          "company_website": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "contact_email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "contact_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "contact_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "contact_phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "contact_title": {
+            "type": "string",
+            "nullable": true
+          },
+          "creator_id": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "creator_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "currency": {
+            "type": "string"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ProposalData"
+          },
+          "editor": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "expires_at": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "invoicing": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "is_agreement": {
+            "type": "boolean"
+          },
+          "is_only_proposal_in_series": {
+            "type": "boolean"
+          },
+          "is_test": {
+            "type": "boolean"
+          },
+          "language": {
+            "type": "string"
+          },
+          "pdf_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true
+          },
+          "pending": {
+            "type": "boolean"
+          },
+          "pending_reason": {
+            "type": "string",
+            "nullable": true
+          },
+          "recipient_company_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "recipient_email": {
+            "type": "string",
+            "format": "email",
+            "nullable": true
+          },
+          "recipient_id": {
+            "type": "integer",
+            "format": "int64",
+            "nullable": true
+          },
+          "recipient_is_set": {
+            "type": "boolean"
+          },
+          "recipient_name": {
+            "type": "string",
+            "nullable": true
+          },
+          "recipient_phone": {
+            "type": "string",
+            "nullable": true
+          },
+          "signatures": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["ip", "name", "user_agent"],
+              "properties": {
+                "date": {
+                  "type": "string"
+                },
+                "ip": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "user_agent": {
+                  "type": "string"
+                },
+                "user_id": {
+                  "type": "integer",
+                  "format": "int64"
+                }
+              }
+            }
+          },
+          "status": {
+            "$ref": "#/components/schemas/ProposalStatus"
+          },
+          "status_changed_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "tax_options": {
+            "$ref": "#/components/schemas/TaxOptions"
+          },
+          "discount_decimals": {
+            "$ref": "#/components/schemas/DiscountDecimals"
+          },
+          "tracking": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "updated_at": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "value_with_tax": {
+            "type": "number"
+          },
+          "value_without_tax": {
+            "type": "number"
+          },
+          "version": {
+            "type": "integer",
+            "nullable": true
+          }
+        }
+      },
+      "CreateRfpRequest": {
+        "type": "object",
+        "required": ["email"],
+        "additionalProperties": {
+          "type": "string"
+        },
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "company_name": {
+            "type": "string"
+          },
+          "first_name": {
+            "type": "string"
+          },
+          "last_name": {
+            "type": "string"
+          },
+          "phone_number": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "pattern": "^[a-zA-Z]{2}$"
+          },
+          "start_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "end_date": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "is_test": {
+            "type": "string"
+          },
+          "silent_confirmation": {
+            "type": "string"
+          },
+          "redirect": {
+            "type": "string",
+            "format": "uri"
+          }
+        }
+      },
+      "CreateRfpResponse": {
+        "type": "object",
+        "required": ["id"],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      }
+    }
+  }
+}
