@@ -1,5 +1,7 @@
+import { after } from "next/server";
 import { Resend } from "resend";
 import { insertEnquiry } from "@/lib/db/enquiries";
+import { nudge } from "@/lib/queue";
 
 // Real email intake. The webhook carries no body, so we store the row now and the worker fetches the body later.
 export async function POST(request: Request) {
@@ -29,19 +31,23 @@ export async function POST(request: Request) {
   }
 
   const { email_id, message_id, from, subject } = event.data;
+  let result;
   try {
-    const { id, created } = await insertEnquiry({
+    result = await insertEnquiry({
       messageId: message_id,
       source: "email",
       emailId: email_id,
       subject,
       sender: from,
     });
-    console.log("inbound: stored", { id, created });
-    return Response.json({ id, created });
   } catch (err) {
     // Not 200: the email is not stored, so Resend must retry the delivery.
     console.error("inbound: insert failed", { message: err instanceof Error ? err.message : String(err) });
     return new Response("storage error", { status: 500 });
   }
+  const { id, created } = result;
+  console.log("inbound: stored", { id, created });
+  // Only a new row gets a nudge. Runs after the response is sent, and a failed nudge never changes the response.
+  if (created) after(() => nudge(request.url, id));
+  return Response.json({ id, created });
 }

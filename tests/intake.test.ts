@@ -8,6 +8,14 @@ import { migrate } from "../lib/db/migrate";
 let current: postgres.Sql;
 vi.mock("../lib/db/client", () => ({ db: () => current }));
 
+// after() only works inside a real request. Here it collects the callbacks so a test can run them by hand.
+const afterCallbacks = vi.hoisted(() => [] as Array<() => unknown>);
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => void afterCallbacks.push(fn),
+}));
+const runAfter = () => Promise.all(afterCallbacks.splice(0).map((fn) => fn()));
+
 import { POST as inbound } from "../app/api/inbound/route";
 import { POST as paste } from "../app/api/enquiries/route";
 
@@ -34,8 +42,14 @@ beforeAll(async () => {
   await migrate(url);
 });
 
+const fetchMock = vi.fn();
+
 beforeEach(async () => {
   current = sql;
+  afterCallbacks.length = 0;
+  fetchMock.mockReset().mockResolvedValue(new Response("{}"));
+  vi.stubGlobal("fetch", fetchMock);
+  process.env.WORKER_SECRET = "worker-secret";
   await sql`TRUNCATE enquiries, events CASCADE`;
 });
 
@@ -126,6 +140,52 @@ describe("email intake", () => {
     expect(res.status).toBe(500);
     current = sql;
     expect(await count()).toBe(0);
+  });
+});
+
+describe("worker nudge", () => {
+  test("a new email nudges the worker once, with its id and the secret, only after the response", async () => {
+    const { id } = await (await inbound(webhook(received()))).json();
+    expect(fetchMock).not.toHaveBeenCalled(); // the response is already built, the nudge waits in after()
+    await runAfter();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(String(url)).toBe("http://test/api/worker");
+    expect(init.headers.authorization).toBe("Bearer worker-secret");
+    expect(JSON.parse(init.body)).toEqual({ id });
+  });
+
+  test("a duplicate delivery sends no second nudge", async () => {
+    await inbound(webhook(received()));
+    await inbound(webhook(received(), { id: "msg_2" }));
+    await runAfter();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a new paste nudges once, a repeat does not", async () => {
+    await paste(pasteReq({ body: "Nudge me" }));
+    await paste(pasteReq({ body: "Nudge me" }));
+    await runAfter();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  test("a failed insert sends no nudge", async () => {
+    current = postgres("postgres://nobody:nothing@127.0.0.1:1/none", { max: 1, connect_timeout: 2 });
+    await inbound(webhook(received()));
+    await runAfter();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  test("a worker that is down or refuses does not change the intake response or throw", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("network down"));
+    const res = await inbound(webhook(received()));
+    await expect(runAfter()).resolves.toBeDefined();
+    expect(res.status).toBe(200);
+    expect(await count()).toBe(1); // the row is stored, the sweeper will find it
+
+    fetchMock.mockResolvedValueOnce(new Response("no", { status: 401 }));
+    await paste(pasteReq({ body: "Refused" }));
+    await expect(runAfter()).resolves.toBeDefined();
   });
 });
 

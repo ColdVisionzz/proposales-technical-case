@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { after } from "next/server";
 import { insertEnquiry } from "@/lib/db/enquiries";
+import { nudge } from "@/lib/queue";
 
 // Paste form intake. Same insert as email. The same text on the same UTC day counts as one enquiry.
 export async function POST(request: Request) {
@@ -12,11 +14,14 @@ export async function POST(request: Request) {
   const day = new Date().toISOString().slice(0, 10);
   const hash = createHash("sha256").update(`${subject ?? ""}\n${body}`).digest("hex");
 
+  let result;
   try {
-    const { id, created } = await insertEnquiry({ messageId: `paste:${day}:${hash}`, source: "paste", subject, body, sender });
-    return Response.json({ id, created }, { status: created ? 201 : 200 });
+    result = await insertEnquiry({ messageId: `paste:${day}:${hash}`, source: "paste", subject, body, sender });
   } catch (err) {
     console.error("enquiries: insert failed", { message: err instanceof Error ? err.message : String(err) });
     return Response.json({ error: "storage error" }, { status: 500 });
   }
+  const { id, created } = result;
+  if (created) after(() => nudge(request.url, id));
+  return Response.json({ id, created }, { status: created ? 201 : 200 });
 }
