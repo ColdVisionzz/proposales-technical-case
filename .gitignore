@@ -1,0 +1,13 @@
+# Private planning docs and Claude working files (local only, not for the public repo)
+.claude/
+planning/
+.vibe-wise/
+tasks/
+
+node_modules/
+.next/
+.vercel/
+coverage/
+
+.env*
+!.env.example
