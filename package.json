@@ -9,13 +9,14 @@
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
-    "migrate": "node scripts/stub.mjs migrate T5",
+    "migrate": "tsx scripts/migrate.ts",
     "eval": "node scripts/stub.mjs eval T22",
     "probe": "node scripts/stub.mjs probe T3b",
     "generate:types": "openapi-typescript fixtures/proposales/openapi.json -o lib/proposales/api-types.ts"
   },
   "dependencies": {
     "next": "16.4.2",
+    "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "resend": "^6.34.1"
@@ -31,6 +32,7 @@
     "eslint-config-next": "16.4.2",
     "openapi-typescript": "^7.13.0",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.12"
   }
