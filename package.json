@@ -10,16 +10,18 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "migrate": "tsx scripts/migrate.ts",
-    "eval": "node scripts/stub.mjs eval T22",
+    "eval": "tsx scripts/eval.ts",
     "probe": "node scripts/stub.mjs probe T3b",
     "generate:types": "openapi-typescript fixtures/proposales/openapi.json -o lib/proposales/api-types.ts"
   },
   "dependencies": {
+    "ai": "^6.0.309",
     "next": "16.4.2",
     "postgres": "^3.4.9",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "resend": "^6.34.1"
+    "resend": "^6.34.1",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
