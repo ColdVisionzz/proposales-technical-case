@@ -19,8 +19,18 @@ describe("outcomes", () => {
     expect(d.reasons[0]).toContain("Short notice");
   });
 
-  test("key fields found but low confidence on an optional field: flagged draft", () => {
-    expect(decideFor({ company: f("Northwind AB", "Northwind AB", 0.5) }).outcome).toBe("flagged_draft");
+  test("low confidence on a nice-to-know field stays a draft: the flag belongs to that field only", () => {
+    const v = validate(clean({ company: f("Northwind AB", "Northwind AB", 0.5), nights: f(1, "12-13 March 2027", 0.4) }), email, catalog, TODAY, policy);
+    expect(decide(v)).toEqual({ outcome: "draft", reasons: [] });
+    expect(v.flags.map((x) => x.field).sort()).toEqual(["company", "nights"]); // still reported, shown next to the field
+  });
+
+  test.each<[string, Partial<Extraction>]>([
+    ["endDate", { endDate: f("2027-03-13", "12-13 March 2027", 0.7) }],
+    ["language", { language: f(null, null) }],
+    ["products", { products: [] }],
+  ])("a flag on %s, an important field, flags the whole draft", (_field, overrides) => {
+    expect(decideFor(overrides).outcome).toBe("flagged_draft");
   });
 
   test("key fields found but only fairly sure (0.7): flagged draft", () => {
@@ -68,8 +78,16 @@ describe("outcomes", () => {
 });
 
 describe("edges between outcomes", () => {
-  test("an unsupported optional field is flagged, it does not block the draft", () => {
-    expect(decideFor({ company: f("Acme", "Acme Corp") }).outcome).toBe("flagged_draft");
+  test("an unsupported nice-to-know field is dropped and flagged on its own, it blocks nothing", () => {
+    const v = validate(clean({ company: f("Acme", "Acme Corp") }), email, catalog, TODAY, policy);
+    expect(v.company.value).toBeNull();
+    expect(decide(v).outcome).toBe("draft");
+  });
+
+  test("a flag on the 'email' field (too long, cut short) flags the whole draft", () => {
+    const v = validate(clean(), email, catalog, TODAY, policy);
+    const flag = { field: "email", level: "check" as const, message: "The email is very long" };
+    expect(decide({ ...v, flags: [...v.flags, flag] }).outcome).toBe("flagged_draft");
   });
 
   test("valid dates and guests but no catalog product: still a draft, flagged to add blocks by hand", () => {

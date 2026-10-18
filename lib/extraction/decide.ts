@@ -1,4 +1,5 @@
-import type { Validated } from "./validate";
+import { draftLevelFields } from "./policy";
+import type { Flag, Validated } from "./validate";
 
 export type Outcome = "ignored" | "needs_review" | "flagged_draft" | "draft";
 export type Decision = { outcome: Outcome; reasons: string[] };
@@ -9,7 +10,10 @@ const CRITICAL = [
   ["guests", "Guest count"],
 ] as const;
 
-// First match wins: not an enquiry, then a critical field missing, then any flag, then a clean draft.
+export const isDraftLevel = (flag: Flag) => draftLevelFields.includes(flag.field);
+
+// First match wins: not an enquiry, then a critical field missing, then a draft-level flag, then a clean draft.
+// Flags on other fields are kept in the report and shown next to their field, but do not flag the draft.
 export function decide(v: Validated): Decision {
   if (!v.isEnquiry) return { outcome: "ignored", reasons: ["This does not look like an enquiry"] };
 
@@ -19,6 +23,7 @@ export function decide(v: Validated): Decision {
   });
   if (missing.length) return { outcome: "needs_review", reasons: missing };
 
-  if (v.flags.length) return { outcome: "flagged_draft", reasons: v.flags.map((f) => `${f.field}: ${f.message}`) };
+  const important = v.flags.filter(isDraftLevel);
+  if (important.length) return { outcome: "flagged_draft", reasons: important.map((f) => `${f.field}: ${f.message}`) };
   return { outcome: "draft", reasons: [] };
 }

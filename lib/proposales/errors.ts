@@ -6,6 +6,7 @@
 // ------------------------------------------------------------------------------------------
 // HTTP 429                             -> retryable "rate_limited", honours Retry-After
 // HTTP 5xx                             -> retryable "upstream_<status>"
+// Any error carrying a numeric statusCode (AI SDK) -> same rules as the HTTP rows above
 // Timeout (AbortError, TimeoutError)   -> retryable "timeout"
 // Dropped connection ("fetch failed")  -> retryable "network"
 // HTTP 401 / 403                       -> permanent "auth", loud (wrong or revoked key)
@@ -47,6 +48,12 @@ export function classifyHttp(status: number, retryAfter?: string | null): Failur
 // For anything that was thrown: a GatewayError, a timeout, a network error, or a bug.
 export function classifyError(error: unknown): Failure {
   if (error instanceof GatewayError) return error.failure;
+  // The AI SDK's API-call errors carry the provider's HTTP status and response headers.
+  const status = typeof error === "object" && error !== null ? (error as { statusCode?: unknown }).statusCode : undefined;
+  if (typeof status === "number") {
+    const headers = (error as { responseHeaders?: Record<string, string> }).responseHeaders;
+    return classifyHttp(status, headers?.["retry-after"]);
+  }
   if (error instanceof Error) {
     if (error.name === "AbortError" || error.name === "TimeoutError") return { kind: "retryable", reason: "timeout" };
     // Node's fetch reports a dropped connection as TypeError("fetch failed"). Other TypeErrors are our bugs.

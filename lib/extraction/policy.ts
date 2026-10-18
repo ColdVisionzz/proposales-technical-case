@@ -10,5 +10,10 @@ export type Policy = {
 
 export const policy: Policy = { certain: 0.8, examine: 0.6, maxGuests: 1000, largeGroup: 200, shortNoticeDays: 7 };
 
+// A flag on one of these fields makes the whole draft a "flagged draft". A flag on any other field
+// (company, rooms, nights, budget, ...) stays attached to that field and does not flag the draft.
+// "email" is the flag for an email that was too long and cut short.
+export const draftLevelFields: readonly string[] = ["startDate", "endDate", "guests", "products", "language", "email"];
+
 // Draft language when the email's language is unknown or unusable.
 export const DEFAULT_LANGUAGE = "en";

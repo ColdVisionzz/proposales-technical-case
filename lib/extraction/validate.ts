@@ -46,7 +46,7 @@ const evidenceFound = (evidence: string | null, emailNorm: string) => {
 };
 
 // Days since 1970-01-01 for a real calendar day written YYYY-MM-DD, otherwise null (so 2027-02-30 is null).
-function dayNumber(text: string): number | null {
+export function dayNumber(text: string): number | null {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
   if (!m) return null;
   const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
@@ -141,16 +141,20 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
 
   // Products: only catalog ids, once each, with a quote in the email and enough confidence.
   const catalogIds = new Set(catalog.map((c) => c.variation_id));
+  const productName = (id: number) => {
+    const item = catalog.find((c) => c.variation_id === id);
+    return item ? `"${item.title.en ?? Object.values(item.title)[0] ?? id}"` : String(id);
+  };
   const products: Validated["products"] = [];
   for (const product of extraction.products) {
     const drop = (message: string) => flags.push({ field: "products", level: "unsupported", message, claimed: product.variationId, evidence: product.evidence });
     const confidence = clamp(product.confidence);
     if (!catalogIds.has(product.variationId)) drop("The model picked a product that is not in the catalog, so it was left out");
     else if (products.some((p) => p.variationId === product.variationId)) continue;
-    else if (!evidenceFound(product.evidence, emailNorm)) drop(`Product ${product.variationId} left out: its quoted words are not in the email`);
-    else if (confidence < policy.examine) drop(`Product ${product.variationId} left out: the model was not confident enough (${confidence})`);
+    else if (!evidenceFound(product.evidence, emailNorm)) drop(`${productName(product.variationId)} left out: its quoted words are not in the email`);
+    else if (confidence < policy.examine) drop(`${productName(product.variationId)} left out: the model was not confident enough (${confidence})`);
     else {
-      if (confidence < policy.certain) flags.push({ field: "products", level: "check", message: `Product ${product.variationId}: the model was only fairly sure (${confidence})`, claimed: product.variationId, evidence: product.evidence });
+      if (confidence < policy.certain) flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: the model was only fairly sure (${confidence})`, claimed: product.variationId, evidence: product.evidence });
       products.push({ variationId: product.variationId, confidence, evidence: product.evidence });
     }
   }

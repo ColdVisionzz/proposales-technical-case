@@ -184,6 +184,11 @@ describe("products", () => {
     expect(productFlags(v).map((x) => x.level).sort()).toEqual(["check", "unsupported"]);
   });
 
+  test("product flags name the product so a salesperson can read them", () => {
+    const v = run({ products: [{ variationId: 3002, confidence: 0.7, evidence: "lunch" }] });
+    expect(productFlags(v)[0].message).toBe('"Lunch": the model was only fairly sure (0.7)');
+  });
+
   test("the same product twice is kept once", () => {
     const one = { variationId: 3001, confidence: 1, evidence: "a meeting room" };
     expect(run({ products: [one, one] }).products).toHaveLength(1);

@@ -60,6 +60,21 @@ describe("classifyError", () => {
   test("a dropped connection is a retryable network error", () => {
     expect(classifyError(new TypeError("fetch failed"))).toEqual({ kind: "retryable", reason: "network" });
   });
+  // The AI SDK (and Resend) errors carry the provider's HTTP status. Without this, a model outage looked like a bug.
+  test.each([
+    [503, { kind: "retryable", reason: "upstream_503" }],
+    [429, { kind: "retryable", reason: "rate_limited", retryAfterMs: 7000 }],
+    [401, { kind: "permanent", reason: "auth", loud: true }],
+    [400, { kind: "permanent", reason: "bad_request_400" }],
+  ])("an error with statusCode %i is classified like that HTTP status", (statusCode, expected) => {
+    const error = Object.assign(new Error("provider said so"), { statusCode, responseHeaders: { "retry-after": "7" } });
+    expect(classifyError(error)).toEqual(expected);
+  });
+
+  test("a statusCode that is not a number is ignored", () => {
+    expect(classifyError(Object.assign(new Error("x"), { statusCode: "503" }))).toEqual({ kind: "permanent", reason: "unknown" });
+  });
+
   test("our own bugs are permanent, not retried", () => {
     expect(classifyError(new TypeError("x is not a function"))).toEqual({ kind: "permanent", reason: "unknown" });
     expect(classifyError(new Error("boom"))).toEqual({ kind: "permanent", reason: "unknown" });
