@@ -11,7 +11,7 @@
     "test": "vitest run",
     "migrate": "tsx scripts/migrate.ts",
     "eval": "tsx scripts/eval.ts",
-    "probe": "node scripts/stub.mjs probe T3b",
+    "probe": "tsx scripts/probe.ts",
     "generate:types": "openapi-typescript fixtures/proposales/openapi.json -o lib/proposales/api-types.ts"
   },
   "dependencies": {
