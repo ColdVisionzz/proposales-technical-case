@@ -7,10 +7,11 @@ import { migrate } from "../lib/db/migrate";
 let current: postgres.Sql;
 vi.mock("../lib/db/client", () => ({ db: () => current }));
 
-import { claimEnquiry, finishDraft, insertEnquiry, LostLeaseError, saveBody } from "../lib/db/enquiries";
+import { claimEnquiry, finishDraft, insertEnquiry, LostLeaseError, registerFingerprint, saveBody } from "../lib/db/enquiries";
 import { MAX_EMAIL_CHARS } from "../lib/email/text";
 import { classifyHttp, GatewayError } from "../lib/proposales/errors";
 import { createFakeGateway } from "../lib/proposales/fake";
+import { fingerprintOf } from "../lib/pipeline/fingerprint";
 import { processEnquiry, type Deps } from "../lib/pipeline/process";
 import { BACKOFF_SECONDS, MAX_MODEL_TRIES, MAX_TRIES } from "../lib/pipeline/retry";
 import { catalog, clean, email, f, TODAY } from "./extraction.fixtures";
@@ -44,8 +45,8 @@ afterAll(async () => {
 
 const SENDER = "Anna Lindqvist <anna@northwind.example.com>";
 let counter = 0;
-const addPaste = async (body = email.body) =>
-  (await insertEnquiry({ messageId: `paste:${counter++}`, source: "paste", subject: email.subject, body, sender: SENDER })).id;
+const addPaste = async (body = email.body, sender: string | null = SENDER) =>
+  (await insertEnquiry({ messageId: `paste:${counter++}`, source: "paste", subject: email.subject, body, sender: sender ?? undefined })).id;
 const addEmail = async () =>
   (await insertEnquiry({ messageId: `<m${counter++}@example>`, source: "email", emailId: "em_1", subject: email.subject, sender: SENDER })).id;
 const row = async (id: string) => (await sql`SELECT * FROM enquiries WHERE id = ${id}`)[0];
@@ -228,6 +229,125 @@ describe("one enquiry never creates two drafts", () => {
 });
 
 // ---- Guarantee 2: the claim --------------------------------------------------------------------------------------
+
+describe("the same text sent again never creates a second draft", () => {
+  // Each send has its own Message-ID, so these are separate rows: only the content can show they are repeats.
+  const addCopy = async (sender = SENDER) => {
+    const { id } = await insertEnquiry({ messageId: `<copy${counter++}@example>`, source: "email", emailId: "em_x", subject: email.subject, sender });
+    return { id };
+  };
+  const run = async (id: string, deps: Deps) => processEnquiry(id, deps);
+
+  test("three sends of the same email: one draft, and the repeats cost no model call", async () => {
+    const { fake, deps, extractFn } = setup();
+    const ids = [await addCopy(), await addCopy(), await addCopy()].map((c) => c.id);
+    expect(await run(ids[0], deps)).toBe("draft_created");
+    expect(await run(ids[1], deps)).toBe("draft_created");
+    expect(await run(ids[2], deps)).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(1);
+    expect(extractFn).toHaveBeenCalledTimes(1);
+    const rows = await Promise.all(ids.map(row));
+    expect(new Set(rows.map((r) => r.proposal_uuid)).size).toBe(1); // all three point at the same draft
+    expect(rows.map((r) => r.duplicate_of)).toEqual([null, ids[0], ids[0]]);
+    expect(rows[1].flags.reasons[0]).toMatch(/Same email as an earlier enquiry/);
+  });
+
+  test("spacing and case do not matter, the sender's name does not matter, the address does", async () => {
+    const { fake, deps } = setup();
+    const a = await addCopy("Anna <anna@northwind.example.com>");
+    const b = await addCopy("ANNA@Northwind.example.com");
+    await run(a.id, deps);
+    await run(b.id, { ...deps, fetchBody: vi.fn(async () => ({ text: email.body.toUpperCase().replace(/ /g, "   "), html: null })) });
+    expect(fake.drafts).toHaveLength(1);
+  });
+
+  test("a changed body is a new enquiry, and so is another sender", async () => {
+    const { fake, deps } = setup();
+    const a = await addCopy();
+    const b = await addCopy();
+    const c = await addCopy("Bo <bo@other.example.com>");
+    await run(a.id, deps);
+    // One added sentence: the quotes the model gave are still in the text, but it is no longer the same email.
+    await run(b.id, { ...deps, fetchBody: vi.fn(async () => ({ text: `${email.body}\n\nP.S. We also need a flipchart.`, html: null })) });
+    await run(c.id, deps);
+    expect(fake.drafts).toHaveLength(3);
+    expect((await row(b.id)).duplicate_of).toBeNull();
+  });
+
+  test("a repeat after the window is a new enquiry", async () => {
+    const { fake, deps } = setup();
+    const a = await addCopy();
+    await run(a.id, deps);
+    await sql`UPDATE enquiries SET created_at = now() - interval '8 days' WHERE id = ${a.id}`;
+    const b = await addCopy();
+    await run(b.id, deps);
+    expect(fake.drafts).toHaveLength(2);
+  });
+
+  test("a row with no sender address is not fingerprinted", async () => {
+    const { fake, deps } = setup();
+    const a = await addPaste(email.body, null);
+    const b = await addPaste(email.body, null);
+    await run(a, deps);
+    await run(b, deps);
+    expect(fake.drafts).toHaveLength(2);
+    expect((await row(a)).fingerprint).toBeNull();
+  });
+
+  test("the first copy ended without a draft (needs review): the repeat is not stuck waiting, it is judged on its own", async () => {
+    const vague = clean({ startDate: f(null, null), endDate: f(null, null), guests: f(null, null) });
+    const { fake, deps, extractFn } = setup({}, vague);
+    const a = await addCopy();
+    const b = await addCopy();
+    expect(await run(a.id, deps)).toBe("needs_review");
+    expect(await run(b.id, deps)).toBe("needs_review");
+    expect(extractFn).toHaveBeenCalledTimes(2);
+    expect(fake.drafts).toHaveLength(0);
+  });
+
+  test("a copy that arrives while the first is still being processed waits, then reuses its draft", async () => {
+    const { fake, deps, extractFn } = setup();
+    const a = await addCopy();
+    const b = await addCopy();
+    // The first copy has won the right to create but has not finished (its worker is mid-way).
+    const claimed = await claimEnquiry(a.id, MAX_TRIES);
+    await sql`UPDATE enquiries SET raw_body = ${email.body} WHERE id = ${a.id}`;
+    await registerFingerprint(a.id, claimed!.attempt, fingerprintOf(SENDER, email.body)!, 7);
+
+    expect(await run(b.id, deps)).toBe("retrying");
+    expect(await row(b.id)).toMatchObject({ status: "retrying", last_error: "retryable: duplicate_in_flight" });
+    expect(extractFn).not.toHaveBeenCalled(); // waiting costs nothing
+
+    await sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${a.id}`; // the first worker's lease runs out
+    expect(await run(a.id, deps)).toBe("draft_created"); // its retry skips the fingerprint step: it owns the creation
+    await makeDue(b.id);
+    expect(await run(b.id, deps)).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(1);
+    expect((await row(b.id)).duplicate_of).toBe(a.id);
+  });
+
+  // The race this layer exists for. Without the advisory lock, copies that look at the same moment all see "nobody
+  // owns this" and all proceed.
+  test("five copies processed at the same moment: exactly one draft", async () => {
+    const { fake, deps } = setup();
+    const ids = (await Promise.all(Array.from({ length: 5 }, () => addCopy()))).map((c) => c.id);
+    await Promise.all(ids.map((id) => run(id, deps)));
+    for (let round = 0; round < 3; round++) {
+      await sql`UPDATE enquiries SET next_attempt_at = now() - interval '1 second' WHERE status = 'retrying'`;
+      await Promise.all(ids.map((id) => run(id, deps)));
+    }
+    expect(fake.drafts).toHaveLength(1);
+    expect((await Promise.all(ids.map(row))).map((r) => r.status)).toEqual(Array(5).fill("draft_created"));
+    expect(await sql`SELECT 1 FROM enquiries WHERE dedupe_cleared`).toHaveLength(1);
+  });
+
+  test("a worker that lost its lease cannot register a fingerprint", async () => {
+    const a = await addCopy();
+    const claimed = await claimEnquiry(a.id, MAX_TRIES);
+    await expect(registerFingerprint(a.id, claimed!.attempt + 1, "x".repeat(64), 7)).rejects.toBeInstanceOf(LostLeaseError);
+    expect((await row(a.id)).fingerprint).toBeNull(); // nothing was saved
+  });
+});
 
 describe("the claim", () => {
   test("five workers at the same moment: exactly one processes the row", async () => {
@@ -414,7 +534,7 @@ describe("retries and the cap", () => {
     const early = await addPaste();
     await asTryNumber(early, MAX_MODEL_TRIES - 1);
     expect(await processEnquiry(early, setup({ extract: modelDown(503) }).deps)).toBe("retrying");
-    const last = await addPaste();
+    const last = await addPaste(email.body, "Bo <bo@other.example.com>"); // another sender, so it does not wait for the row above
     await asTryNumber(last, MAX_MODEL_TRIES);
     expect(await processEnquiry(last, setup({ extract: modelDown(503) }).deps)).toBe("failed_permanent");
     expect((await row(last)).last_error).toBe(`gave up after ${MAX_MODEL_TRIES} tries: retryable: upstream_503`);

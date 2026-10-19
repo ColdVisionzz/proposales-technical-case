@@ -36,6 +36,7 @@ export type ClaimedEnquiry = {
   extracted: unknown;
   attempt: number; // the fencing token: every later write must present this exact value. Never resets.
   tries: number; // claims since the last manual reset, this one included: what the attempt cap reads
+  dedupeCleared: boolean; // this row already won the right to create a draft, so the fingerprint step is skipped
 };
 
 // Guarantee 2: one atomic statement decides who owns the row. Never a SELECT followed by an UPDATE.
@@ -55,7 +56,7 @@ export async function claimEnquiry(id: string, maxTries: number): Promise<Claime
       AND ( status = 'queued'
             OR (status = 'retrying' AND next_attempt_at <= now())
             OR (status = 'processing' AND locked_until < now()) )
-    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts, tries`;
+    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts, tries, dedupe_cleared`;
   if (!row) return null;
   return {
     id: row.id,
@@ -67,6 +68,7 @@ export async function claimEnquiry(id: string, maxTries: number): Promise<Claime
     extracted: row.extracted,
     attempt: row.attempts,
     tries: row.tries,
+    dedupeCleared: row.dedupe_cleared,
   };
 }
 
@@ -90,6 +92,44 @@ export async function saveBody(id: string, attempt: number, body: string): Promi
   guard(await db()`
     UPDATE enquiries SET raw_body = COALESCE(raw_body, ${body}), updated_at = now()
     WHERE id = ${id} AND status = 'processing' AND attempts = ${attempt}`);
+}
+
+export type FingerprintDecision =
+  | { decision: "proceed" } // nobody else owns this content: go on and create (this row is now marked cleared)
+  | { decision: "wait" } // an earlier row with the same content is still being processed: try again later
+  | { decision: "adopt"; of: string; draft: { uuid: string; url: string } }; // an earlier row already made the draft
+
+// Guarantee 1, layer 3: the same text sent again must not make a second draft. Two rows with the same content can reach
+// this point at the same moment, so a plain "look, then decide" would let both through. The advisory lock on the
+// fingerprint makes the look-and-decide one step at a time, and the decision is written before the lock is released
+// (the lock ends with the transaction), so the next row sees it. A row marked cleared is the one owner of the creation.
+// The write is fenced like every other: a worker that lost its lease throws and nothing is saved.
+export async function registerFingerprint(id: string, attempt: number, fingerprint: string, windowDays: number): Promise<FingerprintDecision> {
+  return db().begin(async (tx) => {
+    await tx`SELECT pg_advisory_xact_lock(hashtextextended(${fingerprint}, 0))`;
+    const [done] = await tx`
+      SELECT id, proposal_uuid, proposal_url FROM enquiries
+      WHERE fingerprint = ${fingerprint} AND id <> ${id} AND proposal_uuid IS NOT NULL
+        AND created_at > now() - make_interval(days => ${windowDays})
+      ORDER BY created_at, id LIMIT 1`;
+    let result: FingerprintDecision;
+    if (done) {
+      result = { decision: "adopt", of: done.id, draft: { uuid: done.proposal_uuid, url: done.proposal_url } };
+    } else {
+      const [owner] = await tx`
+        SELECT 1 FROM enquiries
+        WHERE fingerprint = ${fingerprint} AND id <> ${id} AND dedupe_cleared AND status IN ('queued', 'processing', 'retrying')
+          AND created_at > now() - make_interval(days => ${windowDays})
+        LIMIT 1`;
+      result = owner ? { decision: "wait" } : { decision: "proceed" };
+    }
+    guard(await tx`
+      UPDATE enquiries
+      SET fingerprint = ${fingerprint}, duplicate_of = ${result.decision === "adopt" ? result.of : null},
+          dedupe_cleared = ${result.decision === "proceed"}, updated_at = now()
+      WHERE id = ${id} AND status = 'processing' AND attempts = ${attempt}`);
+    return result;
+  });
 }
 
 export async function saveExtraction(id: string, attempt: number, extracted: unknown, model: string, promptVersion: string): Promise<void> {

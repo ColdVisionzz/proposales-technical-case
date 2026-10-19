@@ -5,6 +5,7 @@ import {
   finishWithoutDraft,
   LostLeaseError,
   parkRetrying,
+  registerFingerprint,
   saveBody,
   saveExtraction,
 } from "../db/enquiries";
@@ -13,9 +14,10 @@ import { decide } from "../extraction/decide";
 import type { extract as extractFn } from "../extraction/extract";
 import { extractionSchema } from "../extraction/schema";
 import { validate, type Flag } from "../extraction/validate";
-import { classifyError } from "../proposales/errors";
+import { classifyError, GatewayError } from "../proposales/errors";
 import type { ProposalesGateway } from "../proposales/gateway";
 import { buildDraft, parseSender } from "./draft";
+import { DUPLICATE_WINDOW_DAYS, fingerprintOf } from "./fingerprint";
 import { exhausted, MAX_TRIES, retryDelaySeconds } from "./retry";
 
 // Everything processEnquiry touches outside the database, passed in so tests can use fakes.
@@ -50,6 +52,22 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       await finishWithoutDraft(id, attempt, "needs_review", { flags: [], reasons });
       return "needs_review";
     }
+    // 2b. Guarantee 1, layer 3: the same text sent again has a new Message-ID, so only its content can show it is a repeat.
+    // Before the model runs, so a repeat costs nothing. A row that already won the right to create (cleared) skips this.
+    if (!row.dedupeCleared) {
+      const fingerprint = fingerprintOf(row.sender, body);
+      if (fingerprint) {
+        const seen = await registerFingerprint(id, attempt, fingerprint, DUPLICATE_WINDOW_DAYS);
+        // Retryable, so the normal backoff and cap apply. Not really a gateway failure, but it is the type the catch classifies.
+        if (seen.decision === "wait") throw new GatewayError({ kind: "retryable", reason: "duplicate_in_flight" });
+        if (seen.decision === "adopt") {
+          const reasons = [`Same email as an earlier enquiry (${seen.of.slice(0, 8)}): its draft was reused, no new draft was created`];
+          await finishDraft(id, attempt, seen.draft, { flags: [], reasons });
+          return "draft_created";
+        }
+      }
+    }
+
     const subject = row.subject ?? "";
     const cut = truncateEmail(body);
     const email = { subject, body: cut.text, sender: row.sender ?? undefined };
