@@ -1,14 +1,16 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { EnquiryDetail, EnquirySummary } from "@/lib/db/enquiry-views";
 import { useNow, usePoll } from "@/lib/dashboard/hooks";
 import type { Health } from "@/lib/pipeline/health";
 import { EnquiryDrawer } from "./EnquiryDrawer";
 import { EnquiryList } from "./EnquiryList";
 import { HealthBanner } from "./HealthBanner";
+import { Check, Copy, Mark } from "./icons";
 import { Pipeline } from "./Pipeline";
+import { ProposalPreview } from "./ProposalPreview";
 
 const INBOUND = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,6 +32,7 @@ export function Dashboard() {
   const focus = rows.find((r) => r.id === selectedId) ?? rows[0] ?? null;
   const detailId = selectedId ?? focus?.id ?? null;
   const detail = usePoll<EnquiryDetail>(detailId ? `/api/enquiries/${detailId}` : null, 2000).data;
+  const focusDetail = focus && detail?.id === focus.id ? detail : null;
 
   const open = (id: string) => router.push(`/?id=${id}`, { scroll: false });
   const close = () => {
@@ -38,39 +41,41 @@ export function Dashboard() {
 
   return (
     <>
-      <HealthBanner health={health.data} chaos={list.data?.chaos ?? false} offline={list.stale} />
-      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-24 pt-8 md:px-8 md:pt-12">
-        <header className="mb-10 flex flex-wrap items-end justify-between gap-4 md:mb-14">
-          <div>
-            <h1 className="display text-4xl font-semibold md:text-6xl">Inbox to Draft</h1>
-            <p className="mt-2 text-lg text-muted">
-              Email a booking to <span className="font-medium text-[color:var(--signal)] [overflow-wrap:anywhere]">{INBOUND || "the inbound address"}</span> and watch it become a draft proposal.
-            </p>
+      <div className="sticky top-0 z-30">
+        <HealthBanner health={health.data} chaos={list.data?.chaos ?? false} offline={list.stale} />
+        <header className="topbar">
+          <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 md:px-8">
+            <h1 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+              <Mark className="h-6 w-6" />
+              Inbox to Draft
+            </h1>
+            <div className="flex min-w-0 items-center gap-4">
+              {INBOUND && <CopyAddress address={INBOUND} className="hidden sm:inline-flex" />}
+              <p className="label flex items-center gap-2 text-sm text-muted" role="status">
+                <span className={`h-1.5 w-1.5 rounded-full ${list.stale ? "bg-warn" : "animate-pulse bg-accent"}`} />
+                {list.stale ? "Reconnecting" : "Live"}
+              </p>
+            </div>
           </div>
-          <p className="flex items-center gap-2 text-sm text-muted" role="status">
-            <span className={`h-2 w-2 rounded-full ${list.stale ? "bg-[color:var(--warn)]" : "animate-pulse bg-[color:var(--signal)]"}`} />
-            {list.stale ? "Reconnecting" : "Live"}
-          </p>
         </header>
+      </div>
 
-        {focus ? (
-          <Pipeline key={focus.id} enquiry={focus} detail={detail?.id === focus.id ? detail : null} names={names} now={now} onOpen={() => open(focus.id)} />
-        ) : (
-          <EmptyStage loading={!list.data} />
+      <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-10 md:px-8 md:pt-14">
+        {focus ? <Pipeline key={focus.id} enquiry={focus} detail={focusDetail} now={now} /> : <EmptyStage loading={!list.data} />}
+
+        {focus && (
+          <div className="mt-8 grid gap-8 lg:grid-cols-[5fr_7fr] lg:gap-6">
+            <ProposalPreview key={focus.id} enquiry={focus} detail={focusDetail} names={names} now={now} onOpen={() => open(focus.id)} />
+            <section aria-labelledby="recent">
+              <h2 id="recent" className="mb-3 text-sm font-semibold lg:sr-only">
+                Recent enquiries
+              </h2>
+              <EnquiryList rows={rows} now={now} focusId={focus.id} onSelect={open} inbound={INBOUND || "the inbound address"} />
+            </section>
+          </div>
         )}
 
-        <section className="mt-16" aria-labelledby="recent">
-          <h2 id="recent" className="mb-3 text-xl font-semibold">
-            Recent enquiries
-          </h2>
-          {list.data ? (
-            <EnquiryList rows={rows} now={now} focusId={focus?.id ?? null} onSelect={open} inbound={INBOUND || "the inbound address"} />
-          ) : (
-            <div className="h-40 animate-pulse rounded-3xl bg-line" aria-busy="true" />
-          )}
-        </section>
-
-        <p className="mt-16 text-sm text-muted">Demo build: one shared inbox, no accounts. A real product would use proper sign-in and a separate inbox for each hotel.</p>
+        <p className="mt-14 max-w-xl text-sm text-muted">One shared inbox and no accounts. A real deployment would add sign-in and a separate inbox for each hotel.</p>
       </main>
       <EnquiryDrawer open={selectedId !== null} detail={detail?.id === selectedId ? detail : null} names={names} now={now} onClose={close} />
     </>
@@ -79,9 +84,43 @@ export function Dashboard() {
 
 function EmptyStage({ loading }: { loading: boolean }) {
   return (
-    <div className="rounded-3xl border-2 border-dashed border-line px-6 py-16 text-center" aria-busy={loading}>
-      <p className="display text-2xl font-semibold">{loading ? "Connecting…" : "The pipe is empty"}</p>
-      {!loading && <p className="mx-auto mt-2 max-w-md text-muted">Send an enquiry to the address above. It shows up here the moment it arrives.</p>}
-    </div>
+    <section className="panel px-6 py-16 text-center" aria-busy={loading} aria-label="Latest enquiry">
+      <Mark className="mx-auto h-8 w-8" />
+      <h2 className="display mt-5 text-3xl font-semibold">{loading ? "Connecting" : "Waiting for the first enquiry"}</h2>
+      {!loading && (
+        <>
+          <p className="mx-auto mt-2 max-w-md text-muted">Send an enquiry email to this address. It appears here the moment it arrives.</p>
+          {INBOUND && <CopyAddress address={INBOUND} className="mt-6 inline-flex" />}
+        </>
+      )}
+    </section>
+  );
+}
+
+// The inbound address as one tap: copies it and says so. The label is announced politely, the timer clears on unmount.
+function CopyAddress({ address, className = "" }: { address: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(address);
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1600);
+    } catch {
+      // Clipboard blocked: the address stays selectable on screen, nothing else to do.
+    }
+  }
+
+  return (
+    <button type="button" onClick={copy} aria-label={`Copy the inbound address ${address}`} className={`press num min-w-0 items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:border-line-strong ${className}`}>
+      <span className="truncate">{address}</span>
+      {copied ? <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> : <Copy className="h-3.5 w-3.5 shrink-0 text-muted" />}
+      <span className="sr-only" role="status">
+        {copied ? "Copied" : ""}
+      </span>
+    </button>
   );
 }

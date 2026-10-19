@@ -28,7 +28,7 @@ export function RetryButton({ id, className = "" }: { id: string; className?: st
         type="button"
         onClick={retry}
         disabled={state === "sending" || state === "sent"}
-        className="rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background transition active:scale-[0.97] disabled:opacity-50"
+        className="press rounded-full bg-foreground px-4 py-2 text-sm font-medium text-background disabled:opacity-50"
       >
         {state === "sending" ? "Retrying…" : state === "sent" ? "Back in the queue" : "Retry now"}
       </button>

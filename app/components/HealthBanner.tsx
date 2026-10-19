@@ -20,12 +20,12 @@ export function HealthBanner({ health, chaos, offline }: { health: Health | null
   if (!notices.length) return null;
 
   return (
-    <div className="sticky top-0 z-30">
+    <div>
       {notices.map((n) => (
         <div
           key={n.key}
           role={n.tone === "bad" ? "alert" : "status"}
-          className={`px-4 py-2.5 text-sm md:px-8 ${n.tone === "bad" ? "bg-[color:var(--bad)] text-white" : "bg-[color:var(--peach)] text-[color:var(--peach-ink)]"}`}
+          className={`px-4 py-2 text-sm md:px-8 ${n.tone === "bad" ? "bg-bad text-white" : "bg-warn text-white"}`}
         >
           <strong className="font-semibold">{n.title}.</strong> {n.text}
         </div>

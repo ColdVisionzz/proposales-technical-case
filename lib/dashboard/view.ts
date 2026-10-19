@@ -11,6 +11,18 @@ export type Mood = "waiting" | "moving" | "stalled" | "done" | "stopped" | "fail
 export const AI_AT = 0.45;
 const CREATING_AT = 0.75;
 
+// The four stages the rail shows, in order. A pipe position (`at`) maps onto one of them.
+export const STAGES = [
+  { label: "Received", sub: "Email stored" },
+  { label: "Reading", sub: "Extracting details" },
+  { label: "Drafting", sub: "Building the proposal" },
+  { label: "Draft ready", sub: "Ready to review" },
+] as const;
+
+export function stageIndex(at: number): number {
+  return at >= 1 ? 3 : at >= CREATING_AT ? 2 : at >= AI_AT ? 1 : 0;
+}
+
 export type PipeView = { at: number; mood: Mood; headline: string; sub: string };
 
 type PipeInput = { status: string; step: string | null; lastError: string | null; nextAttemptAt: string | null };

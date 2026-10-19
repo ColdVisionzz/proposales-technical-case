@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AI_AT, booking, explainError, lineText, niceDates, pipeView, timeTaken } from "../lib/dashboard/view";
+import { AI_AT, booking, stageIndex, explainError, lineText, niceDates, pipeView, timeTaken } from "../lib/dashboard/view";
 import { clean } from "./extraction.fixtures";
 
 const NOW = Date.parse("2026-10-19T12:00:10Z");
@@ -95,5 +95,19 @@ describe("booking", () => {
     expect(lineText({ label: "Hotel room", quantity: 1 })).toBe("1 hotel room");
     expect(lineText({ label: "Lunch", quantity: 12 })).toBe("12 lunches");
     expect(lineText({ label: "Meeting room", quantity: 2 })).toBe("2 meeting rooms");
+  });
+});
+
+describe("stageIndex", () => {
+  test("every status lands on the stage the pipe shows", () => {
+    const stage = (status: string, step: string | null = null) => stageIndex(pipeView({ ...base, status, step }, NOW).at);
+    expect(stage("queued")).toBe(0);
+    expect(stage("processing", "claimed")).toBe(1);
+    expect(stage("processing", "extracted")).toBe(2);
+    expect(stage("retrying")).toBe(2);
+    expect(stage("failed_permanent")).toBe(2);
+    expect(stage("needs_review")).toBe(1);
+    expect(stage("ignored")).toBe(1);
+    expect(stage("draft_created")).toBe(3);
   });
 });
