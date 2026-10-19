@@ -107,22 +107,22 @@ export type FingerprintDecision =
 export async function registerFingerprint(id: string, attempt: number, fingerprint: string, windowDays: number): Promise<FingerprintDecision> {
   return db().begin(async (tx) => {
     await tx`SELECT pg_advisory_xact_lock(hashtextextended(${fingerprint}, 0))`;
-    const [done] = await tx`
+    // ONE statement, so both questions ("has someone already made the draft?" and "is someone still making it?") are
+    // answered from the same snapshot. The lock does not stop another worker from finishing its row (finishDraft does not
+    // take it). With two separate statements, a copy that finished between them counted as neither, and this row went on
+    // to create a second draft. A row with a draft wins over one still working.
+    const [other] = await tx`
       SELECT id, proposal_uuid, proposal_url FROM enquiries
-      WHERE fingerprint = ${fingerprint} AND id <> ${id} AND proposal_uuid IS NOT NULL
+      WHERE fingerprint = ${fingerprint} AND id <> ${id}
         AND created_at > now() - make_interval(days => ${windowDays})
-      ORDER BY created_at, id LIMIT 1`;
-    let result: FingerprintDecision;
-    if (done) {
-      result = { decision: "adopt", of: done.id, draft: { uuid: done.proposal_uuid, url: done.proposal_url } };
-    } else {
-      const [owner] = await tx`
-        SELECT 1 FROM enquiries
-        WHERE fingerprint = ${fingerprint} AND id <> ${id} AND dedupe_cleared AND status IN ('queued', 'processing', 'retrying')
-          AND created_at > now() - make_interval(days => ${windowDays})
-        LIMIT 1`;
-      result = owner ? { decision: "wait" } : { decision: "proceed" };
-    }
+        AND ( proposal_uuid IS NOT NULL OR (dedupe_cleared AND status IN ('queued', 'processing', 'retrying')) )
+      ORDER BY (proposal_uuid IS NOT NULL) DESC, created_at, id
+      LIMIT 1`;
+    const result: FingerprintDecision = !other
+      ? { decision: "proceed" }
+      : other.proposal_uuid
+        ? { decision: "adopt", of: other.id, draft: { uuid: other.proposal_uuid, url: other.proposal_url } }
+        : { decision: "wait" };
     guard(await tx`
       UPDATE enquiries
       SET fingerprint = ${fingerprint}, duplicate_of = ${result.decision === "adopt" ? result.of : null},

@@ -13,7 +13,10 @@ import { classifyHttp, GatewayError } from "../lib/proposales/errors";
 import { createFakeGateway } from "../lib/proposales/fake";
 import { fingerprintOf } from "../lib/pipeline/fingerprint";
 import { processEnquiry, type Deps } from "../lib/pipeline/process";
-import { BACKOFF_SECONDS, MAX_MODEL_TRIES, MAX_TRIES } from "../lib/pipeline/retry";
+import { productionDeps } from "../lib/pipeline/deps";
+import { SimulatedCrash } from "../lib/pipeline/faults";
+import { BACKOFF_SECONDS, LEASE_SECONDS, MAX_MODEL_TRIES, MAX_TRIES, WATCHDOG_SECONDS } from "../lib/pipeline/retry";
+import { wake } from "../lib/pipeline/wake";
 import { catalog, clean, email, f, TODAY } from "./extraction.fixtures";
 
 let sql: postgres.Sql;
@@ -343,6 +346,23 @@ describe("the same text sent again never creates a second draft", () => {
     expect(await sql`SELECT 1 FROM enquiries WHERE dedupe_cleared`).toHaveLength(1);
   });
 
+  // Found by T16: the check used two separate statements ("is there a finished draft?", then "is anyone still working?").
+  // A copy that finished between them was counted as neither, and the next copy created a second draft. The window is a
+  // few milliseconds wide, so one run rarely hits it: this repeats the race. Fixed by asking both questions in one statement.
+  test("five copies at once, repeated: never a second draft, even when a copy finishes mid-check", async () => {
+    for (let n = 0; n < 15; n++) {
+      await sql`TRUNCATE enquiries, events CASCADE`;
+      const { fake, deps } = setup();
+      const ids = (await Promise.all(Array.from({ length: 5 }, () => addCopy()))).map((c) => c.id);
+      await Promise.all(ids.map((id) => run(id, deps)));
+      for (let round = 0; round < 3; round++) {
+        await sql`UPDATE enquiries SET next_attempt_at = now() - interval '1 second' WHERE status = 'retrying'`;
+        await Promise.all(ids.map((id) => run(id, deps)));
+      }
+      expect(fake.drafts, `round ${n}`).toHaveLength(1);
+    }
+  }, 120_000);
+
   test("a worker that lost its lease cannot register a fingerprint", async () => {
     const a = await addCopy();
     const claimed = await claimEnquiry(a.id, MAX_TRIES);
@@ -585,8 +605,8 @@ describe("the delayed wake-up", () => {
     const { fake, deps, schedule } = setup();
     fake.failNext("createDraft", classifyHttp(503));
     expect(await processEnquiry(id, deps)).toBe("retrying");
-    expect(schedule).toHaveBeenCalledTimes(1);
-    const [scheduledId, delay] = schedule.mock.calls[0];
+    expect(schedule).toHaveBeenCalledTimes(2); // call 1 is the watchdog sent at the claim, call 2 is the retry
+    const [scheduledId, delay] = schedule.mock.calls[1];
     expect(scheduledId).toBe(id);
     expect(delay).toBeGreaterThanOrEqual(BACKOFF_SECONDS[0] * 0.9);
     expect(delay).toBeLessThanOrEqual(BACKOFF_SECONDS[0] * 1.1);
@@ -598,42 +618,42 @@ describe("the delayed wake-up", () => {
     const { fake, deps, schedule } = setup();
     fake.failNext("createDraft", classifyHttp(429, "300"));
     await processEnquiry(id, deps);
-    expect(schedule.mock.calls[0][1]).toBeGreaterThanOrEqual(300);
+    expect(schedule.mock.calls[1][1]).toBeGreaterThanOrEqual(300);
   });
 
-  test("the row is already parked as retrying when the wake-up is requested", async () => {
+  test("the row is already parked as retrying when the retry wake-up is requested", async () => {
     const id = await addPaste();
-    let statusAtSchedule: string | undefined;
-    const { fake, deps } = setup({ schedule: async () => void (statusAtSchedule = (await row(id)).status) });
+    const statuses: string[] = [];
+    const { fake, deps } = setup({ schedule: async () => void statuses.push((await row(id)).status) });
     fake.failNext("createDraft", classifyHttp(503));
     await processEnquiry(id, deps);
-    expect(statusAtSchedule).toBe("retrying"); // park first, then send: a lost message never loses the row
+    expect(statuses).toEqual(["processing", "retrying"]); // watchdog right after the claim, then park first and send: a lost message never loses the row
   });
 
-  test.each([400, 401, 403, 422])("a permanent %i schedules nothing", async (status) => {
+  test.each([400, 401, 403, 422])("a permanent %i schedules no retry (only the watchdog from the claim)", async (status) => {
     const id = await addPaste();
     const { fake, deps, schedule } = setup();
     fake.failNext("createDraft", classifyHttp(status));
     expect(await processEnquiry(id, deps)).toBe("failed_permanent");
-    expect(schedule).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledTimes(1);
   });
 
-  test("giving up at the cap schedules nothing", async () => {
+  test("giving up at the cap schedules no retry", async () => {
     const id = await addPaste();
     const { fake, deps, schedule } = setup();
     await sql`UPDATE enquiries SET tries = ${MAX_TRIES - 1} WHERE id = ${id}`;
     fake.failNext("createDraft", classifyHttp(503));
     expect(await processEnquiry(id, deps)).toBe("failed_permanent");
-    expect(schedule).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledTimes(1);
   });
 
-  test("a success schedules nothing", async () => {
+  test("a success schedules no retry", async () => {
     const { deps, schedule } = setup();
     expect(await processEnquiry(await addPaste(), deps)).toBe("draft_created");
-    expect(schedule).not.toHaveBeenCalled();
+    expect(schedule).toHaveBeenCalledTimes(1);
   });
 
-  test("a worker that lost its lease does not schedule a wake-up for a row it no longer owns", async () => {
+  test("a worker that lost its lease does not schedule a retry for a row it no longer owns", async () => {
     const id = await addPaste();
     const { deps, schedule } = setup({
       extract: vi.fn(async () => {
@@ -643,6 +663,142 @@ describe("the delayed wake-up", () => {
       }) as unknown as Deps["extract"],
     });
     expect(await processEnquiry(id, deps)).toBe("lost_lease");
+    expect(schedule).toHaveBeenCalledTimes(1); // only the watchdog from its own claim
+  });
+});
+
+// ---- T16: the process dies after Proposales created the draft and before our row learns about it -------------------------
+// The one window where the outside world and our database disagree. A test cannot kill a process, so a hook throws
+// SimulatedCrash and processEnquiry lets it through its catch: nothing after it runs and nothing is saved, as in a real crash.
+
+describe("crash after create", () => {
+  const dies = { afterCreate: () => { throw new SimulatedCrash("after create"); } };
+  const expireLease = (id: string) => sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
+
+  test("the world is split after the crash, and the retry reunites it with exactly one draft and no second model call", async () => {
+    const id = await addPaste();
+    const { fake, deps, extractFn } = setup({ faults: dies });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+
+    // The crash really happened between create and save: Proposales has the draft, our row knows nothing.
+    expect(fake.drafts).toHaveLength(1);
+    expect(await row(id)).toMatchObject({ status: "processing", proposal_uuid: null, proposal_url: null, last_error: null, tries: 1 });
+    expect((await row(id)).extracted).not.toBeNull(); // the model was already paid for, and saved
+
+    await expireLease(id); // the dead worker's lease runs out
+    expect(await processEnquiry(id, { ...deps, faults: undefined })).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(1); // still one: search-before-create found it
+    expect(await row(id)).toMatchObject({ status: "draft_created", proposal_uuid: fake.drafts[0].uuid, attempts: 2, tries: 2 });
+    expect(extractFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("five workers race to recover the crashed row: exactly one draft", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup({ faults: dies });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+    await expireLease(id);
+    const results = await Promise.all(Array.from({ length: 5 }, () => processEnquiry(id, { ...deps, faults: undefined })));
+    expect(results.filter((r) => r === "draft_created")).toHaveLength(1);
+    expect(fake.drafts).toHaveLength(1);
+  });
+
+  test("the same enquiry processed twice makes one draft: the second run is refused", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    expect(await processEnquiry(id, deps)).toBe("draft_created");
+    expect(await processEnquiry(id, deps)).toBe("not_claimed");
+    expect(fake.drafts).toHaveLength(1);
+  });
+
+  test("search lag right after the crash: the key search misses but the sender-email fallback still finds the draft", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup({ faults: dies });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+    fake.missNextKeySearch(); // the index has not caught up with the new draft's key
+    await expireLease(id);
+    expect(await processEnquiry(id, { ...deps, faults: undefined })).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(1);
+  });
+
+  // KNOWN LIMIT (SPEC, Guarantee 1): this documents the gap, it does not endorse it. With no sender address and a key
+  // search that misses, the retry cannot find the draft and creates a second one. Probe: the key was findable after
+  // 0.2 s, and retries wait at least 30 s, so it needs a lagging index and a sender-less enquiry at once.
+  // If the gap is ever closed, this test is meant to fail: change it to expect 1.
+  test("known limit: no sender and a lagging key search lets the retry create a second draft", async () => {
+    const id = await addPaste(email.body, null);
+    const { fake, deps } = setup({ faults: dies });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+    fake.missNextKeySearch();
+    await expireLease(id);
+    expect(await processEnquiry(id, { ...deps, faults: undefined })).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(2);
+  });
+
+  test("the crash hook is off in production: productionDeps() never sets it", () => {
+    vi.stubEnv("PROPOSALES_API_KEY", ""); // fake gateway, no real credentials needed
+    try {
+      expect(productionDeps().faults).toBeUndefined();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+});
+
+// ---- T16: the watchdog. A crash runs no code, so a dead worker cannot ask for its own retry ---------------------------
+
+describe("the watchdog", () => {
+  const dies = { afterCreate: () => { throw new SimulatedCrash("after create"); } };
+  const expireLease = (id: string) => sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
+
+  test("every successful claim sends a watchdog for just after the lease, before any work", async () => {
+    const id = await addPaste();
+    const { deps, schedule } = setup();
+    await processEnquiry(id, deps);
+    expect(schedule.mock.calls[0]).toEqual([id, WATCHDOG_SECONDS]);
+    expect(WATCHDOG_SECONDS).toBeGreaterThan(LEASE_SECONDS);
+  });
+
+  test("a refused claim sends nothing", async () => {
+    const id = await addPaste();
+    const { deps, schedule } = setup();
+    await sql`UPDATE enquiries SET status = 'draft_created' WHERE id = ${id}`;
+    expect(await processEnquiry(id, deps)).toBe("not_claimed");
     expect(schedule).not.toHaveBeenCalled();
+  });
+
+  test("LEASE_SECONDS equals the lease the claim really takes, so the watchdog cannot drift from it", async () => {
+    const id = await addPaste();
+    await claimEnquiry(id, MAX_TRIES);
+    const [{ secs }] = await sql`SELECT extract(epoch FROM locked_until - now())::float AS secs FROM enquiries WHERE id = ${id}`;
+    expect(secs).toBeGreaterThan(LEASE_SECONDS - 5);
+    expect(secs).toBeLessThanOrEqual(LEASE_SECONDS);
+  });
+
+  test("a crashed worker is recovered by its own watchdog message, with no sweeper involved", async () => {
+    const id = await addPaste();
+    const { fake, deps, schedule } = setup({ faults: dies });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+    expect(schedule).toHaveBeenCalledTimes(1); // the only thing the dead worker managed to do: ask to be woken
+    await expireLease(id); // time passes until the watchdog is due
+    await wake({ id }, (rowId) => processEnquiry(rowId, { ...deps, faults: undefined })); // the queue delivers the message
+    expect(await row(id)).toMatchObject({ status: "draft_created", proposal_uuid: fake.drafts[0].uuid });
+    expect(fake.drafts).toHaveLength(1);
+  });
+
+  test("a watchdog that arrives after the worker finished changes nothing", async () => {
+    const id = await addPaste();
+    const { deps } = setup();
+    await processEnquiry(id, deps);
+    const before = await row(id);
+    await wake({ id }, (rowId) => processEnquiry(rowId, deps));
+    expect(await row(id)).toEqual(before);
+  });
+
+  test("a watchdog that arrives while the worker still holds a live lease is refused", async () => {
+    const id = await addPaste();
+    await claimEnquiry(id, MAX_TRIES); // worker busy, lease running
+    const { deps } = setup();
+    expect(await processEnquiry(id, deps)).toBe("not_claimed");
+    expect((await row(id)).attempts).toBe(1);
   });
 });

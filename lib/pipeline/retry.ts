@@ -7,6 +7,12 @@ export const MAX_MODEL_TRIES = 3; // model errors cost money, so they give up so
 export const JITTER = 0.1; // +-10%
 const MAX_WAIT_SECONDS = 3600;
 
+// The lease a claim takes (claimEnquiry's SQL says '2 minutes'; a test keeps the two equal). After a claim the worker
+// sends itself a watchdog message for just after the lease would expire: a crash runs no code, so a dead worker cannot
+// ask for its own retry. A worker that finished makes the watchdog harmless, because the claim refuses it.
+export const LEASE_SECONDS = 120;
+export const WATCHDOG_SECONDS = LEASE_SECONDS + 10;
+
 // Has this row used up its tries? `tries` is the count after the claim that just failed.
 export function exhausted(tries: number, step: "model" | "other"): boolean {
   return tries >= (step === "model" ? MAX_MODEL_TRIES : MAX_TRIES);

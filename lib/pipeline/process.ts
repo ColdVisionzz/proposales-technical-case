@@ -18,16 +18,18 @@ import { classifyError, GatewayError } from "../proposales/errors";
 import type { ProposalesGateway } from "../proposales/gateway";
 import { buildDraft, parseSender } from "./draft";
 import { DUPLICATE_WINDOW_DAYS, fingerprintOf } from "./fingerprint";
-import { exhausted, MAX_TRIES, retryDelaySeconds } from "./retry";
+import { SimulatedCrash, type Faults } from "./faults";
+import { exhausted, MAX_TRIES, retryDelaySeconds, WATCHDOG_SECONDS } from "./retry";
 
 // Everything processEnquiry touches outside the database, passed in so tests can use fakes.
 export type Deps = {
+  faults?: Faults; // fault injection for tests; productionDeps() never sets it
   fetchBody: (emailId: string) => Promise<{ text: string | null; html: string | null }>;
   extract: typeof extractFn;
   gateway: ProposalesGateway;
   companyId: number;
   today: () => string; // YYYY-MM-DD
-  schedule: (id: string, delaySeconds: number) => Promise<void>; // wake a parked row after its backoff (never throws)
+  schedule: (id: string, delaySeconds: number) => Promise<void>; // delayed wake-up: the watchdog after a claim, the retry after a park (never throws)
 };
 
 export type Result = "not_claimed" | "lost_lease" | "ignored" | "needs_review" | "draft_created" | "retrying" | "failed_permanent";
@@ -38,6 +40,9 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
   const row = await claimEnquiry(id, MAX_TRIES);
   if (!row) return "not_claimed"; // someone else owns it, or it is finished, not due yet, or out of tries
   const { attempt, tries } = row;
+  // The watchdog: if this worker dies, it cannot ask for its own retry, so ask now for a wake-up just after the lease.
+  // A worker that finishes or parks the row makes the message harmless: the claim refuses it. Never throws.
+  await deps.schedule(id, WATCHDOG_SECONDS);
   let step: "model" | "other" = "other"; // which cap applies if this try fails: model errors cost money, so they give up sooner
 
   try {
@@ -112,6 +117,7 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     if (!draft) {
       const built = buildDraft({ enquiryKey: id, companyId: deps.companyId, validated, flags, catalog, sender: row.sender });
       draft = await deps.gateway.createDraft(built.draft);
+      await deps.faults?.afterCreate?.(); // tests only: the draft exists at Proposales, our row does not know yet
       report = { flags: [...flags, ...built.notes], reasons: decision.reasons };
     }
 
@@ -119,6 +125,7 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     await finishDraft(id, attempt, draft, report);
     return "draft_created";
   } catch (error) {
+    if (error instanceof SimulatedCrash) throw error; // a real crash runs no code: leave the row exactly as it is
     if (error instanceof LostLeaseError) return "lost_lease"; // a newer worker owns the row now
     // One central classifier decides. The row records what happened, never the email's words.
     const failure = classifyError(error);
