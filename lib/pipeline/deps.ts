@@ -1,5 +1,6 @@
 import { fetchEmailBody } from "../email/body";
 import { extract } from "../extraction/extract";
+import { schedule } from "../queue";
 import { getGateway } from "./gateway";
 import type { Deps } from "./process";
 
@@ -16,5 +17,6 @@ export function productionDeps(): Deps {
     gateway: getGateway(),
     companyId: companyId || 1, // 1 is only ever used with the fake gateway
     today: () => new Date().toISOString().slice(0, 10),
+    schedule,
   };
 }

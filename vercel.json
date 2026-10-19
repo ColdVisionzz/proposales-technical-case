@@ -1,0 +1,11 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app/api/queues/retry/route.ts": {
+      "experimentalTriggers": [
+        { "type": "queue/v2beta", "topic": "enquiry-retry", "retryAfterSeconds": 60, "maxDeliveries": 5 }
+      ]
+    }
+  },
+  "crons": [{ "path": "/api/sweeper", "schedule": "0 5 * * *" }]
+}

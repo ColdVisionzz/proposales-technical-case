@@ -15,6 +15,7 @@
     "generate:types": "openapi-typescript fixtures/proposales/openapi.json -o lib/proposales/api-types.ts"
   },
   "dependencies": {
+    "@vercel/queue": "^0.8.0",
     "ai": "^6.0.309",
     "next": "16.4.2",
     "postgres": "^3.4.9",

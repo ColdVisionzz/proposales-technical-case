@@ -27,6 +27,7 @@ export type Deps = {
   gateway: ProposalesGateway;
   companyId: number;
   today: () => string; // YYYY-MM-DD
+  schedule: (id: string, delaySeconds: number) => Promise<void>; // wake a parked row after its backoff (never throws)
 };
 
 export type Result = "not_claimed" | "lost_lease" | "ignored" | "needs_review" | "draft_created" | "retrying" | "failed_permanent";
@@ -124,12 +125,15 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     const message = `${failure.kind}: ${failure.reason}`;
     const giveUp = failure.kind === "retryable" && exhausted(tries, step);
     if (failure.kind === "retryable" && !giveUp) {
+      const delay = retryDelaySeconds(tries, failure.retryAfterMs);
       try {
-        await parkRetrying(id, attempt, message, retryDelaySeconds(tries, failure.retryAfterMs));
+        await parkRetrying(id, attempt, message, delay);
       } catch (parkError) {
         if (parkError instanceof LostLeaseError) return "lost_lease";
         throw parkError;
       }
+      // Park first, then schedule: the saved row is the truth, the message only wakes it. If the send is lost, the sweeper recovers.
+      await deps.schedule(id, delay);
       return "retrying";
     }
     try {

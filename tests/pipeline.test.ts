@@ -60,15 +60,17 @@ function setup(overrides: Partial<Deps> = {}, extraction = clean()) {
   const fake = createFakeGateway(catalog);
   const extractFn = okExtract(extraction);
   const fetchBody = vi.fn(async () => ({ text: email.body, html: null as string | null }));
+  const schedule = vi.fn<Deps["schedule"]>(async () => {}); // records the delayed wake-ups a parked row asks for
   const deps: Deps = {
     fetchBody,
     extract: extractFn as unknown as Deps["extract"],
     gateway: fake.gateway,
     companyId: 1001,
     today: () => TODAY,
+    schedule,
     ...overrides,
   };
-  return { fake, extractFn, fetchBody, deps };
+  return { fake, extractFn, fetchBody, schedule, deps };
 }
 
 // ---- outcomes ---------------------------------------------------------------------------------------------------
@@ -569,5 +571,78 @@ describe("retries and the cap", () => {
     const id = await addPaste();
     await asTryNumber(id, MAX_TRIES + 1); // five claims already happened, all without a caught failure
     expect(await processEnquiry(id, setup().deps)).toBe("not_claimed");
+  });
+});
+
+// ---- T15b: a parked row asks for a delayed wake-up ------------------------------------------------------------------
+
+describe("the delayed wake-up", () => {
+  const dueIn = async (id: string) =>
+    (await sql`SELECT extract(epoch FROM next_attempt_at - now())::float AS secs FROM enquiries WHERE id = ${id}`)[0].secs as number;
+
+  test("a retryable failure parks the row first, then schedules a wake-up for the same delay the row waits", async () => {
+    const id = await addPaste();
+    const { fake, deps, schedule } = setup();
+    fake.failNext("createDraft", classifyHttp(503));
+    expect(await processEnquiry(id, deps)).toBe("retrying");
+    expect(schedule).toHaveBeenCalledTimes(1);
+    const [scheduledId, delay] = schedule.mock.calls[0];
+    expect(scheduledId).toBe(id);
+    expect(delay).toBeGreaterThanOrEqual(BACKOFF_SECONDS[0] * 0.9);
+    expect(delay).toBeLessThanOrEqual(BACKOFF_SECONDS[0] * 1.1);
+    expect(Math.abs((await dueIn(id)) - delay)).toBeLessThan(5); // the row is due when the message arrives
+  });
+
+  test("a 429's Retry-After carries into the scheduled delay", async () => {
+    const id = await addPaste();
+    const { fake, deps, schedule } = setup();
+    fake.failNext("createDraft", classifyHttp(429, "300"));
+    await processEnquiry(id, deps);
+    expect(schedule.mock.calls[0][1]).toBeGreaterThanOrEqual(300);
+  });
+
+  test("the row is already parked as retrying when the wake-up is requested", async () => {
+    const id = await addPaste();
+    let statusAtSchedule: string | undefined;
+    const { fake, deps } = setup({ schedule: async () => void (statusAtSchedule = (await row(id)).status) });
+    fake.failNext("createDraft", classifyHttp(503));
+    await processEnquiry(id, deps);
+    expect(statusAtSchedule).toBe("retrying"); // park first, then send: a lost message never loses the row
+  });
+
+  test.each([400, 401, 403, 422])("a permanent %i schedules nothing", async (status) => {
+    const id = await addPaste();
+    const { fake, deps, schedule } = setup();
+    fake.failNext("createDraft", classifyHttp(status));
+    expect(await processEnquiry(id, deps)).toBe("failed_permanent");
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  test("giving up at the cap schedules nothing", async () => {
+    const id = await addPaste();
+    const { fake, deps, schedule } = setup();
+    await sql`UPDATE enquiries SET tries = ${MAX_TRIES - 1} WHERE id = ${id}`;
+    fake.failNext("createDraft", classifyHttp(503));
+    expect(await processEnquiry(id, deps)).toBe("failed_permanent");
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  test("a success schedules nothing", async () => {
+    const { deps, schedule } = setup();
+    expect(await processEnquiry(await addPaste(), deps)).toBe("draft_created");
+    expect(schedule).not.toHaveBeenCalled();
+  });
+
+  test("a worker that lost its lease does not schedule a wake-up for a row it no longer owns", async () => {
+    const id = await addPaste();
+    const { deps, schedule } = setup({
+      extract: vi.fn(async () => {
+        await sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
+        await claimEnquiry(id, MAX_TRIES); // worker B takes over
+        throw Object.assign(new Error("model down"), { statusCode: 503 });
+      }) as unknown as Deps["extract"],
+    });
+    expect(await processEnquiry(id, deps)).toBe("lost_lease");
+    expect(schedule).not.toHaveBeenCalled();
   });
 });
