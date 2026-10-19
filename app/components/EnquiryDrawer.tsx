@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { EnquiryDetail } from "@/lib/db/enquiry-views";
 import { extractionSchema } from "@/lib/extraction/schema";
-import { explainError, stepLabel, timeTaken } from "@/lib/dashboard/view";
+import { explainError, highlight, stepLabel, timeTaken } from "@/lib/dashboard/view";
 import { ArrowUpRight, Close } from "./icons";
 import { RetryButton } from "./RetryButton";
 import { StatusChip } from "./StatusChip";
@@ -89,6 +89,24 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
   const why = [...(report.reasons ?? []), ...(report.flags ?? []).map((f) => f.message)];
   const t0 = d.events[0] ? Date.parse(d.events[0].at) : 0;
 
+  // Hover or focus on a quote in the email lights its row, and the other way round. Keys: a field name or "product:<id>".
+  const [active, setActive] = useState<string | null>(null);
+  const link = (key: string) => ({
+    tabIndex: 0,
+    "data-on": active === key ? "" : undefined,
+    onMouseEnter: () => setActive(key),
+    onMouseLeave: () => setActive(null),
+    onFocus: () => setActive(key),
+    onBlur: () => setActive(null),
+  });
+  const cited = x
+    ? [
+        ...FIELDS.filter(([, key]) => x[key].value !== null).map(([, key]) => ({ key: key as string, evidence: x[key].evidence })),
+        ...x.products.map((p) => ({ key: `product:${p.variationId}`, evidence: p.evidence })),
+      ]
+    : [];
+  const segments = d.body ? highlight(d.body, cited) : null;
+
   return (
     <>
       {(d.status === "failed_permanent" || d.status === "retrying") && (
@@ -118,7 +136,17 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
         <section>
           <Heading>Original email</Heading>
           <pre className="max-h-[28rem] overflow-auto whitespace-pre-wrap break-words rounded-xl border border-line bg-background p-4 font-mono text-[13px] leading-relaxed">
-            {d.body ?? "The email text has not been fetched yet."}
+            {segments
+              ? segments.map((s, i) =>
+                  s.keys.length ? (
+                    <mark key={i} className="ev" {...link(s.keys.includes(active ?? "") ? (active as string) : s.keys[0])} data-on={s.keys.includes(active ?? "") ? "" : undefined}>
+                      {s.text}
+                    </mark>
+                  ) : (
+                    s.text
+                  ),
+                )
+              : "The email text has not been fetched yet."}
           </pre>
         </section>
 
@@ -129,7 +157,7 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
               {FIELDS.map(([label, key]) => {
                 const f = x[key];
                 return (
-                  <div key={key} className="px-4 py-2.5">
+                  <div key={key} className="row-ev px-4 py-2.5" {...link(key)}>
                     <div className="flex items-baseline justify-between gap-3">
                       <dt className="text-sm text-muted">{label}</dt>
                       <dd className={`text-right text-sm font-medium ${f.value === null ? "text-muted" : ""}`}>
@@ -146,7 +174,7 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
                 <dd className="mt-1 space-y-2">
                   {x.products.length === 0 && <span className="text-sm text-muted">None matched the catalog</span>}
                   {x.products.map((p) => (
-                    <div key={p.variationId}>
+                    <div key={p.variationId} className="row-ev -mx-2 rounded-md px-2 py-1" {...link(`product:${p.variationId}`)}>
                       <span className="text-sm font-medium">{names?.get(p.variationId) ?? `product #${p.variationId}`}</span>
                       <span className="num ml-2 text-xs text-muted">{Math.round(p.confidence * 100)}%</span>
                       <p className="text-sm text-muted">&ldquo;{p.evidence}&rdquo;</p>

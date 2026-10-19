@@ -116,6 +116,12 @@ body {
 .drawer:not([open])::backdrop { opacity: 0; }
 @starting-style { .drawer[open]::backdrop { opacity: 0; } }
 
+/* Evidence links: a quote in the email and the row it backs. Both sides light together (data-on). */
+.ev { color: inherit; border-radius: 3px; background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent); cursor: default; transition: background-color 160ms ease, box-shadow 160ms ease; }
+.ev[data-on] { background: color-mix(in srgb, var(--accent) 38%, transparent); box-shadow: 0 0 0 1px var(--accent); }
+.row-ev { transition: background-color 160ms ease; }
+.row-ev[data-on] { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
 @media (prefers-reduced-motion: reduce) {
   .rail-fill, .node, .press, .drawer, .drawer::backdrop { transition-duration: 1ms !important; transition-delay: 0s !important; }
   .rail .node::after, .line-in, .animate-pulse { animation: none !important; }

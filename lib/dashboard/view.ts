@@ -156,6 +156,37 @@ export function lineText({ label, quantity }: BookingLine): string {
   return `${quantity} ${/(ch|sh|s|x)$/.test(name) ? `${name}es` : `${name}s`}`;
 }
 
+// ---- Evidence highlighting -------------------------------------------------------------------------------------------------
+
+export type Segment = { text: string; keys: string[] };
+
+const QUOTES = /['‘’‛]/;
+const DQUOTES = /["“”]/;
+const DASHES = /[\u2010-\u2015\u2212-]/;
+
+// Find each quote in the original text (so offsets are real) and cut the text at every quote edge. A segment lists every key whose
+// quote covers it, so two fields sharing a phrase both light up. Spacing, case, curly quotes and dashes may differ, as in validate.ts.
+// A quote that is not found highlights nothing: the row still shows it.
+export function highlight(body: string, items: { key: string; evidence: string | null }[]): Segment[] {
+  const ranges: { key: string; start: number; end: number }[] = [];
+  for (const { key, evidence } of items) {
+    const words = evidence?.normalize("NFKC").trim().split(/\s+/).filter(Boolean) ?? [];
+    if (!words.length) continue;
+    const pattern = words
+      .map((w) => [...w].map((c) => (QUOTES.test(c) ? QUOTES.source : DQUOTES.test(c) ? DQUOTES.source : DASHES.test(c) ? DASHES.source : c.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))).join(""))
+      .join("\\s+");
+    const m = new RegExp(pattern, "i").exec(body);
+    if (m) ranges.push({ key, start: m.index, end: m.index + m[0].length });
+  }
+  const cuts = [...new Set([0, body.length, ...ranges.flatMap((r) => [r.start, r.end])])].sort((a, b) => a - b);
+  const out: Segment[] = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const [a, b] = [cuts[i], cuts[i + 1]];
+    out.push({ text: body.slice(a, b), keys: ranges.filter((r) => r.start <= a && r.end >= b).map((r) => r.key) });
+  }
+  return out;
+}
+
 // ---- Timeline --------------------------------------------------------------------------------------------------------------
 
 const STEP_LABEL: Record<string, string> = {

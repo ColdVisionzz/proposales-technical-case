@@ -1,9 +1,12 @@
 import { db } from "./client";
+import { maskDeep, maskEmails } from "./mask";
+
+const mask = (s: string | null) => (s === null ? null : maskEmails(s));
 
 // Read-only queries for the dashboard. Plain SELECTs: nothing here changes state, so none of it can race the pipeline.
 
 // What a row in the list needs. No email body and no extracted fields: the list is fetched every 2 s, so it stays light
-// and never carries customer text beyond sender and subject.
+// and never carries customer text beyond sender and subject. Every string that leaves here has its email addresses masked.
 export type EnquirySummary = {
   id: string;
   status: string;
@@ -35,12 +38,12 @@ export async function listEnquiries(limit = LIST_LIMIT): Promise<EnquirySummary[
     id: r.id,
     status: r.status,
     source: r.source,
-    sender: r.sender,
-    subject: r.raw_subject,
+    sender: mask(r.sender),
+    subject: mask(r.raw_subject),
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
     proposalUrl: r.proposal_url,
-    lastError: r.last_error,
+    lastError: mask(r.last_error),
     nextAttemptAt: r.next_attempt_at ? new Date(r.next_attempt_at).toISOString() : null,
     tries: r.tries,
     step: r.step,
@@ -66,23 +69,23 @@ export async function getEnquiryDetail(id: string): Promise<EnquiryDetail | null
     FROM enquiries WHERE id = ${id}`;
   if (!r) return null;
   const events = await sql`SELECT step, outcome, created_at FROM events WHERE enquiry_id = ${id} ORDER BY created_at, id`;
-  const timeline = events.map((e) => ({ step: e.step as string, outcome: e.outcome as string, at: new Date(e.created_at).toISOString() }));
+  const timeline = events.map((e) => ({ step: e.step as string, outcome: maskEmails(e.outcome as string), at: new Date(e.created_at).toISOString() }));
   return {
     id: r.id,
     status: r.status,
     source: r.source,
-    sender: r.sender,
-    subject: r.raw_subject,
+    sender: mask(r.sender),
+    subject: mask(r.raw_subject),
     createdAt: new Date(r.created_at).toISOString(),
     updatedAt: new Date(r.updated_at).toISOString(),
     proposalUrl: r.proposal_url,
-    lastError: r.last_error,
+    lastError: mask(r.last_error),
     nextAttemptAt: r.next_attempt_at ? new Date(r.next_attempt_at).toISOString() : null,
     tries: r.tries,
     step: timeline.at(-1)?.step ?? null,
-    body: r.raw_body,
-    extracted: r.extracted,
-    flags: r.flags,
+    body: mask(r.raw_body),
+    extracted: maskDeep(r.extracted),
+    flags: maskDeep(r.flags),
     version: r.version,
     model: r.model,
     events: timeline,

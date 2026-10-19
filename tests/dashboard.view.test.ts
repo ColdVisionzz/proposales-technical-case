@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { AI_AT, booking, stageIndex, explainError, lineText, niceDates, pipeView, timeTaken } from "../lib/dashboard/view";
+import { AI_AT, booking, highlight, stageIndex, explainError, lineText, niceDates, pipeView, timeTaken } from "../lib/dashboard/view";
 import { clean } from "./extraction.fixtures";
 
 const NOW = Date.parse("2026-10-19T12:00:10Z");
@@ -109,5 +109,41 @@ describe("stageIndex", () => {
     expect(stage("needs_review")).toBe(1);
     expect(stage("ignored")).toBe(1);
     expect(stage("draft_created")).toBe(3);
+  });
+});
+
+describe("highlight", () => {
+  const marked = (body: string, items: { key: string; evidence: string | null }[]) => highlight(body, items).filter((s) => s.keys.length);
+
+  test("marks the quote and keeps the text whole", () => {
+    const body = "Hi,\nWe need 5 rooms for May.";
+    const items = [{ key: "rooms", evidence: "We need 5 rooms" }];
+    expect(highlight(body, items).map((s) => s.text).join("")).toBe(body);
+    expect(marked(body, items)).toEqual([{ text: "We need 5 rooms", keys: ["rooms"] }]);
+  });
+
+  test("ignores case, line breaks, curly quotes and dash style", () => {
+    expect(marked("we need\n5   ROOMS", [{ key: "r", evidence: "We need 5 rooms" }])[0].text).toBe("we need\n5   ROOMS");
+    expect(marked("it’s a 12–13 March event", [{ key: "d", evidence: "it's a 12-13 March" }])[0].text).toBe("it’s a 12–13 March");
+  });
+
+  test("two fields on overlapping words both own the shared part", () => {
+    const segs = marked("30 guests and 15 rooms", [
+      { key: "guests", evidence: "30 guests and 15" },
+      { key: "rooms", evidence: "15 rooms" },
+    ]);
+    expect(segs).toEqual([
+      { text: "30 guests and ", keys: ["guests"] },
+      { text: "15", keys: ["guests", "rooms"] },
+      { text: " rooms", keys: ["rooms"] },
+    ]);
+  });
+
+  test("a quote that is not in the email, or is empty, marks nothing", () => {
+    expect(marked("hello", [{ key: "a", evidence: "goodbye" }, { key: "b", evidence: "  " }, { key: "c", evidence: null }])).toEqual([]);
+  });
+
+  test("regex characters in a quote are literal", () => {
+    expect(marked("budget (approx.) 5k+", [{ key: "b", evidence: "(approx.) 5k+" }])[0].text).toBe("(approx.) 5k+");
   });
 });

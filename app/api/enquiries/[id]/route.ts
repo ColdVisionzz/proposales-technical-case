@@ -1,5 +1,6 @@
 import { connection } from "next/server";
 import { editExtraction } from "@/lib/db/enquiries";
+import { maskDeep } from "@/lib/db/mask";
 import { getEnquiryDetail } from "@/lib/db/enquiry-views";
 import { extractionSchema } from "@/lib/extraction/schema";
 
@@ -21,7 +22,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
   const result = await editExtraction(id, extracted.data, version);
   if (result.ok) return Response.json({ version: result.version });
   if (!result.current) return Response.json({ error: "not found" }, { status: 404 });
-  return Response.json({ error: "conflict", current: result.current }, { status: 409 });
+  return Response.json({ error: "conflict", current: maskDeep(result.current) }, { status: 409 });
 }
 
 // One enquiry in full for the drawer: the original email, the extracted fields and the event timeline. No password gate until T21.
