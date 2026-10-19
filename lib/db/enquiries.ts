@@ -128,3 +128,27 @@ export async function failPermanent(id: string, attempt: number, error: string):
     SET status = 'failed_permanent', last_error = ${error}, locked_until = NULL, updated_at = now()
     WHERE id = ${id} AND status = 'processing' AND attempts = ${attempt}`);
 }
+
+// ---- Guarantee 3: human edits ---------------------------------------------------------------------------------------
+
+export type CurrentEnquiry = { status: string; version: number; extracted: unknown };
+
+// Optimistic locking: the edit says "change this, assuming it is still version N". One statement checks and changes.
+// The status check sits in the same statement, so a human edit can never race a running worker: only needs_review rows
+// are editable, and no worker touches those.
+// Zero rows: the version is stale, the row is not editable now, or the id does not exist. The caller gets the current row.
+export async function editExtraction(
+  id: string,
+  extracted: unknown,
+  version: number,
+): Promise<{ ok: true; version: number } | { ok: false; current: CurrentEnquiry | null }> {
+  const sql = db();
+  const [updated] = await sql`
+    UPDATE enquiries
+    SET extracted = ${sql.json(extracted as never)}, version = version + 1, updated_at = now()
+    WHERE id = ${id} AND version = ${version} AND status = 'needs_review'
+    RETURNING version`;
+  if (updated) return { ok: true, version: updated.version };
+  const [current] = await sql`SELECT status, version, extracted FROM enquiries WHERE id = ${id}`;
+  return { ok: false, current: current ? { status: current.status, version: current.version, extracted: current.extracted } : null };
+}
