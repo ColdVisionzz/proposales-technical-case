@@ -18,6 +18,7 @@ import { classifyError, GatewayError } from "../proposales/errors";
 import type { ProposalesGateway } from "../proposales/gateway";
 import { buildDraft, parseSender } from "./draft";
 import { DUPLICATE_WINDOW_DAYS, fingerprintOf } from "./fingerprint";
+import { recordEvent } from "../db/events";
 import { SimulatedCrash, type Faults } from "./faults";
 import { exhausted, MAX_TRIES, retryDelaySeconds, WATCHDOG_SECONDS } from "./retry";
 
@@ -43,6 +44,9 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
   // The watchdog: if this worker dies, it cannot ask for its own retry, so ask now for a wake-up just after the lease.
   // A worker that finishes or parks the row makes the message harmless: the claim refuses it. Never throws.
   await deps.schedule(id, WATCHDOG_SECONDS);
+  // The timeline the dashboard shows: one event as each step finishes (best effort, never fails the enquiry).
+  const log = (eventStep: string, outcome: string) => recordEvent(id, eventStep, outcome);
+  await log("claimed", `try ${tries}`);
   let step: "model" | "other" = "other"; // which cap applies if this try fails: model errors cost money, so they give up sooner
 
   try {
@@ -52,10 +56,12 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       if (!row.emailId) throw new Error("email row has no email_id"); // cannot happen through insertEnquiry
       body = readableBody(await deps.fetchBody(row.emailId));
       await saveBody(id, attempt, body);
+      await log("body_fetched", "ok");
     }
     if (!body.trim()) {
       const reasons = ["The email has no readable text"];
       await finishWithoutDraft(id, attempt, "needs_review", { flags: [], reasons });
+      await log("done", "needs_review: no readable text");
       return "needs_review";
     }
     // 2b. Guarantee 1, layer 3: the same text sent again has a new Message-ID, so only its content can show it is a repeat.
@@ -69,6 +75,8 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
         if (seen.decision === "adopt") {
           const reasons = [`Same email as an earlier enquiry (${seen.of.slice(0, 8)}): its draft was reused, no new draft was created`];
           await finishDraft(id, attempt, seen.draft, { flags: [], reasons });
+          await log("draft_found", `same email as ${seen.of.slice(0, 8)}, its draft was reused`);
+          await log("done", "draft_created");
           return "draft_created";
         }
       }
@@ -92,10 +100,13 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       if (result.status === "invalid") {
         const reasons = ["Could not read this reliably: the model's answer did not fit the expected shape"];
         await finishWithoutDraft(id, attempt, "needs_review", { flags: [], reasons });
+        await log("extracted", "invalid output");
+        await log("done", "needs_review");
         return "needs_review";
       }
       extraction = result.extraction;
       await saveExtraction(id, attempt, extraction, result.meta.model, result.meta.promptVersion);
+      await log("extracted", result.meta.model);
     }
 
     // 4. Validate and decide. Pure and free, so recomputed on every attempt.
@@ -104,8 +115,10 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       ? [...validated.flags, { field: "email", level: "check", message: `The email is very long: only the first ${MAX_EMAIL_CHARS} characters were read` }]
       : validated.flags;
     const decision = decide({ ...validated, flags });
+    await log("decided", decision.outcome);
     if (decision.outcome === "ignored" || decision.outcome === "needs_review") {
       await finishWithoutDraft(id, attempt, decision.outcome, { flags, reasons: decision.reasons });
+      await log("done", decision.outcome);
       return decision.outcome;
     }
 
@@ -117,19 +130,24 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     if (!draft) {
       const built = buildDraft({ enquiryKey: id, companyId: deps.companyId, validated, flags, catalog, sender: row.sender });
       draft = await deps.gateway.createDraft(built.draft);
+      // Written before the crash hook and before the save: this is the moment Proposales and our row disagree.
+      await log("draft_created", "at Proposales");
       await deps.faults?.afterCreate?.(); // tests only: the draft exists at Proposales, our row does not know yet
       report = { flags: [...flags, ...built.notes], reasons: decision.reasons };
+    } else {
+      await log("draft_found", "already at Proposales, none created");
     }
 
     // 7. One statement: draft link and final status together.
     await finishDraft(id, attempt, draft, report);
+    await log("done", "draft_created");
     return "draft_created";
   } catch (error) {
     if (error instanceof SimulatedCrash) throw error; // a real crash runs no code: leave the row exactly as it is
     if (error instanceof LostLeaseError) return "lost_lease"; // a newer worker owns the row now
     // One central classifier decides. The row records what happened, never the email's words.
     const failure = classifyError(error);
-    const message = `${failure.kind}: ${failure.reason}`;
+    const message = `${failure.kind}: ${failure.reason}${failure.kind === "permanent" && failure.detail ? ` (${failure.detail})` : ""}`;
     const giveUp = failure.kind === "retryable" && exhausted(tries, step);
     if (failure.kind === "retryable" && !giveUp) {
       const delay = retryDelaySeconds(tries, failure.retryAfterMs);
@@ -141,14 +159,17 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       }
       // Park first, then schedule: the saved row is the truth, the message only wakes it. If the send is lost, the sweeper recovers.
       await deps.schedule(id, delay);
+      await log("retry_scheduled", `${message}, in ${Math.round(delay)}s`);
       return "retrying";
     }
+    const finalMessage = giveUp ? `gave up after ${tries} tries: ${message}` : message;
     try {
-      await failPermanent(id, attempt, giveUp ? `gave up after ${tries} tries: ${message}` : message);
+      await failPermanent(id, attempt, finalMessage);
     } catch (failError) {
       if (failError instanceof LostLeaseError) return "lost_lease";
       throw failError;
     }
+    await log("failed", finalMessage);
     return "failed_permanent";
   }
 }

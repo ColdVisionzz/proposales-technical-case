@@ -142,7 +142,9 @@ describe("failures are classified in one place", () => {
     expect(await run(() => json(real("error.401.json"), 401))).toEqual({ kind: "permanent", reason: "auth", loud: true });
   });
   test("400 with the real body is permanent, never retried", async () => {
-    expect(await run(() => json(real("error.400.json"), 400))).toEqual({ kind: "permanent", reason: "bad_request_400" });
+    const failure = await run(() => json(real("error.400.json"), 400));
+    expect(failure).toMatchObject({ kind: "permanent", reason: "bad_request_400", detail: expect.any(String) }); // the response is kept, short, so the row says what was wrong
+    expect((failure as { detail: string }).detail.length).toBeLessThanOrEqual(200);
   });
   test("429 is retryable and keeps Retry-After", async () => {
     expect(await run(() => json({ error: { message: "slow down" } }, 429, { "retry-after": "30" }))).toEqual({ kind: "retryable", reason: "rate_limited", retryAfterMs: 30_000 });

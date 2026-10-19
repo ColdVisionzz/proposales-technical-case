@@ -31,7 +31,7 @@ beforeAll(async () => {
   }
   sql = postgres(url, { max: 5, onnotice: () => {} });
   current = sql;
-  await sql`DROP TABLE IF EXISTS events, enquiries, schema_migrations CASCADE`;
+  await sql`DROP TABLE IF EXISTS events, enquiries, settings, schema_migrations CASCADE`;
   await migrate(url);
 });
 
@@ -107,6 +107,11 @@ describe("sweep: the attempt cap", () => {
       last_error: `gave up after ${MAX_TRIES} tries: crashed repeatedly`,
       locked_until: null,
     });
+    // and the timeline says so, since the dead worker could not
+    expect(await sql`SELECT step, outcome FROM events WHERE enquiry_id = ${id} ORDER BY id`).toEqual([
+      { step: "received", outcome: "paste" },
+      { step: "failed", outcome: `gave up after ${MAX_TRIES} tries: crashed repeatedly` },
+    ]);
   });
 
   test("a live-lease row at the cap is left alone: only an expired lease proves the worker is gone", async () => {

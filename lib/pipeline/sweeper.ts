@@ -1,4 +1,5 @@
 import { db } from "../db/client";
+import { recordEvent } from "../db/events";
 import { nudge } from "../queue";
 import { MAX_TRIES } from "./retry";
 
@@ -18,6 +19,8 @@ export async function sweep(requestUrl: string, send: (requestUrl: string, id: s
     SET status = 'failed_permanent', last_error = ${`gave up after ${MAX_TRIES} tries: crashed repeatedly`}, locked_until = NULL, updated_at = now()
     WHERE status = 'processing' AND locked_until < now() AND tries >= ${MAX_TRIES}
     RETURNING id`;
+
+  for (const row of failed) await recordEvent(row.id as string, "failed", `gave up after ${MAX_TRIES} tries: crashed repeatedly`);
 
   // Out-of-tries rows are excluded everywhere, or they would fill the batch and starve the rows that can still run.
   const stuck = await sql`

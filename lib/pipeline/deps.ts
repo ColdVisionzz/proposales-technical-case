@@ -1,6 +1,7 @@
 import { fetchEmailBody } from "../email/body";
 import { extract } from "../extraction/extract";
 import { schedule } from "../queue";
+import { withChaos } from "./chaos";
 import { getGateway } from "./gateway";
 import type { Deps } from "./process";
 
@@ -14,7 +15,7 @@ export function productionDeps(): Deps {
   return {
     fetchBody: fetchEmailBody,
     extract,
-    gateway: getGateway(),
+    gateway: withChaos(getGateway()), // the demo switch can make every Proposales call fail (lib/pipeline/chaos.ts)
     companyId: companyId || 1, // 1 is only ever used with the fake gateway
     today: () => new Date().toISOString().slice(0, 10),
     schedule,

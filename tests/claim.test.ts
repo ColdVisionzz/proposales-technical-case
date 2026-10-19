@@ -35,7 +35,7 @@ beforeAll(async () => {
   // 20 connections: the parallel-claim test needs all 20 statements in flight at once.
   sql = postgres(url, { max: 20, onnotice: () => {} });
   current = sql;
-  await sql`DROP TABLE IF EXISTS events, enquiries, schema_migrations CASCADE`;
+  await sql`DROP TABLE IF EXISTS events, enquiries, settings, schema_migrations CASCADE`;
   await migrate(url);
 });
 

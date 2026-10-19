@@ -38,7 +38,7 @@ beforeAll(async () => {
   process.env.RESEND_API_KEY = "re_test";
   sql = postgres(url, { max: 1, onnotice: () => {} });
   current = sql;
-  await sql`DROP TABLE IF EXISTS events, enquiries, schema_migrations CASCADE`;
+  await sql`DROP TABLE IF EXISTS events, enquiries, settings, schema_migrations CASCADE`;
   await migrate(url);
 });
 

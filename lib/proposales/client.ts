@@ -54,7 +54,11 @@ export function createProposalesClient(options: ClientOptions): ProposalesGatewa
       throw new GatewayError(classifyError(error), { cause: error });
     }
 
-    if (status < 200 || status >= 300) throw new GatewayError(classifyHttp(status, retryAfter));
+    if (status < 200 || status >= 300) {
+      const failure = classifyHttp(status, retryAfter);
+      // ponytail: first 200 chars of the response, whitespace flattened; Proposales errors name fields, not our email text
+      throw new GatewayError(failure.kind === "permanent" && status !== 401 && status !== 403 ? { ...failure, detail: text.replace(/\s+/g, " ").trim().slice(0, 200) } : failure);
+    }
     try {
       return JSON.parse(text);
     } catch {

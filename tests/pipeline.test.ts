@@ -13,6 +13,8 @@ import { classifyHttp, GatewayError } from "../lib/proposales/errors";
 import { createFakeGateway } from "../lib/proposales/fake";
 import { fingerprintOf } from "../lib/pipeline/fingerprint";
 import { processEnquiry, type Deps } from "../lib/pipeline/process";
+import { writeChaos } from "../lib/db/settings";
+import { withChaos } from "../lib/pipeline/chaos";
 import { productionDeps } from "../lib/pipeline/deps";
 import { SimulatedCrash } from "../lib/pipeline/faults";
 import { BACKOFF_SECONDS, LEASE_SECONDS, MAX_MODEL_TRIES, MAX_TRIES, WATCHDOG_SECONDS } from "../lib/pipeline/retry";
@@ -32,7 +34,7 @@ beforeAll(async () => {
   }
   sql = postgres(url, { max: 5, onnotice: () => {} });
   current = sql;
-  await sql`DROP TABLE IF EXISTS events, enquiries, schema_migrations CASCADE`;
+  await sql`DROP TABLE IF EXISTS events, enquiries, settings, schema_migrations CASCADE`;
   await migrate(url);
 });
 
@@ -802,3 +804,157 @@ describe("the watchdog", () => {
     expect((await row(id)).attempts).toBe(1);
   });
 });
+
+// ---- T17: the chaos demo, and the timeline of events --------------------------------------------------------------------
+
+describe("the chaos demo", () => {
+  test("switch on: the row parks as retrying and asks for a wake-up; switch off: the wake-up produces the draft by itself", async () => {
+    const id = await addPaste();
+    const { fake, deps, schedule, extractFn } = setup();
+    const chaotic = { ...deps, gateway: withChaos(fake.gateway) };
+
+    await writeChaos(true);
+    expect(await processEnquiry(id, chaotic)).toBe("retrying");
+    expect(await row(id)).toMatchObject({ status: "retrying", last_error: "retryable: chaos" });
+    expect((await row(id)).next_attempt_at).toBeInstanceOf(Date); // with a time to wake up
+    expect(fake.drafts).toHaveLength(0);
+    expect(schedule).toHaveBeenCalledTimes(2); // the watchdog at the claim, then the retry wake-up
+
+    await writeChaos(false);
+    await makeDue(id); // the delayed message arrives
+    await wake({ id }, (rowId) => processEnquiry(rowId, chaotic));
+    expect((await row(id)).status).toBe("draft_created");
+    expect(fake.drafts).toHaveLength(1);
+    expect(extractFn).toHaveBeenCalledTimes(1); // recovery did not pay for the model again
+  });
+});
+
+describe("production wiring", () => {
+  test("productionDeps() puts the chaos switch in front of Proposales: the live demo depends on it", async () => {
+    vi.stubEnv("PROPOSALES_API_KEY", ""); // fake gateway
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await writeChaos(true);
+      await expect(productionDeps().gateway.getCatalog()).rejects.toMatchObject({ failure: { kind: "retryable", reason: "chaos" } });
+    } finally {
+      await writeChaos(false);
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test("a rejected request keeps the start of the response in the row and the timeline", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    fake.failNext("createDraft", { kind: "permanent", reason: "bad_request_400", detail: "currency: invalid" });
+    await processEnquiry(id, deps);
+    expect((await row(id)).last_error).toBe("permanent: bad_request_400 (currency: invalid)");
+    expect((await sql`SELECT outcome FROM events WHERE enquiry_id = ${id} AND step = 'failed'`)[0].outcome).toBe("permanent: bad_request_400 (currency: invalid)");
+  });
+});
+
+describe("the timeline (events)", () => {
+  const steps = async (id: string) => (await sql`SELECT step FROM events WHERE enquiry_id = ${id} ORDER BY id`).map((r) => r.step as string);
+  const events = async (id: string) => await sql`SELECT step, outcome FROM events WHERE enquiry_id = ${id} ORDER BY id`;
+
+  test("a clean paste leaves the whole story in order", async () => {
+    const id = await addPaste();
+    await processEnquiry(id, setup().deps);
+    expect(await steps(id)).toEqual(["received", "claimed", "extracted", "decided", "draft_created", "done"]);
+  });
+
+  test("an email also shows when its body was fetched", async () => {
+    const id = await addEmail();
+    await processEnquiry(id, setup().deps);
+    expect(await steps(id)).toEqual(["received", "claimed", "body_fetched", "extracted", "decided", "draft_created", "done"]);
+  });
+
+  test("a failure and its recovery both show: the error and the retry, then a second try without a second extraction", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    fake.failNext("createDraft", classifyHttp(503));
+    await processEnquiry(id, deps);
+    expect((await events(id)).at(-1)).toMatchObject({ step: "retry_scheduled", outcome: expect.stringMatching(/^retryable: upstream_503, in \d+s$/) });
+    await makeDue(id);
+    await processEnquiry(id, deps);
+    expect(await steps(id)).toEqual(["received", "claimed", "extracted", "decided", "retry_scheduled", "claimed", "decided", "draft_created", "done"]);
+    expect((await events(id)).filter((e) => e.step === "claimed").map((e) => e.outcome)).toEqual(["try 1", "try 2"]);
+  });
+
+  test("a permanent failure and a give-up end the timeline with the reason", async () => {
+    const hard = await addPaste();
+    const a = setup();
+    a.fake.failNext("createDraft", classifyHttp(400));
+    await processEnquiry(hard, a.deps);
+    expect((await events(hard)).at(-1)).toEqual({ step: "failed", outcome: "permanent: bad_request_400" });
+
+    const tired = await addPaste(email.body, "Bo <bo@other.example.com>");
+    await sql`UPDATE enquiries SET tries = ${MAX_TRIES - 1} WHERE id = ${tired}`;
+    const b = setup();
+    b.fake.failNext("createDraft", classifyHttp(503));
+    await processEnquiry(tired, b.deps);
+    expect((await events(tired)).at(-1)).toEqual({ step: "failed", outcome: `gave up after ${MAX_TRIES} tries: retryable: upstream_503` });
+  });
+
+  test("output the model could not shape is visible as such", async () => {
+    const id = await addPaste();
+    const invalid = vi.fn(async () => ({ status: "invalid" as const, reason: "No object generated", meta: { model: "m", promptVersion: "v2", ms: 1, attempts: 2 } }));
+    await processEnquiry(id, setup({ extract: invalid as unknown as Deps["extract"] }).deps);
+    expect(await events(id)).toEqual(expect.arrayContaining([{ step: "extracted", outcome: "invalid output" }, { step: "done", outcome: "needs_review" }]));
+  });
+
+  test("a repeat of an earlier email shows that its draft was reused", async () => {
+    const first = await addCopyForTimeline();
+    const second = await addCopyForTimeline();
+    const { deps } = setup();
+    await processEnquiry(first, deps);
+    await processEnquiry(second, deps);
+    expect(await steps(second)).toEqual(["received", "claimed", "body_fetched", "draft_found", "done"]);
+    expect((await events(second)).find((e) => e.step === "draft_found")!.outcome).toContain("same email as");
+  });
+
+  test("a crash right after create still shows the draft was created: events are written as each step ends, not batched", async () => {
+    const id = await addPaste();
+    const { deps } = setup({ faults: { afterCreate: () => { throw new SimulatedCrash("after create"); } } });
+    await expect(processEnquiry(id, deps)).rejects.toBeInstanceOf(SimulatedCrash);
+    const seen = await steps(id);
+    expect(seen).toContain("draft_created");
+    expect(seen).not.toContain("done");
+  });
+
+  test("a second delivery of the same email adds no second 'received'", async () => {
+    const messageId = `<dup${counter++}@example>`;
+    const a = await insertEnquiry({ messageId, source: "email", emailId: "em_1", sender: SENDER });
+    const b = await insertEnquiry({ messageId, source: "email", emailId: "em_1", sender: SENDER });
+    expect(b).toEqual({ id: a.id, created: false });
+    expect(await steps(a.id)).toEqual(["received"]);
+  });
+
+  test("events never contain the email's words", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    fake.failNext("createDraft", classifyHttp(503));
+    await processEnquiry(id, deps);
+    await makeDue(id);
+    await processEnquiry(id, deps);
+    const all = (await events(id)).map((e) => `${e.step} ${e.outcome}`).join(" ");
+    for (const word of ["24 people", "Hi,", email.subject]) expect(all).not.toContain(word);
+  });
+
+  test("an event that cannot be written never fails the enquiry", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    await sql`ALTER TABLE events RENAME TO events_away`;
+    try {
+      const id = await addPaste();
+      expect(await processEnquiry(id, setup().deps)).toBe("draft_created");
+      expect((await row(id)).status).toBe("draft_created");
+      expect(console.error).toHaveBeenCalledWith("events: insert failed", expect.objectContaining({ step: "claimed" }));
+    } finally {
+      await sql`ALTER TABLE events_away RENAME TO events`;
+    }
+  });
+});
+
+// Two emails with the same sender and words but different message ids, as a person sending it twice would.
+async function addCopyForTimeline() {
+  return (await insertEnquiry({ messageId: `<tl${counter++}@example>`, source: "email", emailId: "em_x", subject: email.subject, sender: SENDER })).id;
+}

@@ -24,7 +24,7 @@ beforeAll(() => {
 });
 
 beforeEach(async () => {
-  await sql`DROP TABLE IF EXISTS events, enquiries, schema_migrations, half_done, probe CASCADE`;
+  await sql`DROP TABLE IF EXISTS events, enquiries, settings, schema_migrations, half_done, probe CASCADE`;
 });
 
 afterAll(async () => {

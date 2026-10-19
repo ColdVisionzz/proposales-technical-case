@@ -16,7 +16,7 @@
 
 export type Failure =
   | { kind: "retryable"; reason: string; retryAfterMs?: number }
-  | { kind: "permanent"; reason: string; loud?: boolean };
+  | { kind: "permanent"; reason: string; loud?: boolean; detail?: string }; // detail: the start of the response, so a 400 says which field
 
 // Gateways throw this and nothing else. A thrown error cannot be forgotten the way an ignored
 // `{ ok: false }` result can.

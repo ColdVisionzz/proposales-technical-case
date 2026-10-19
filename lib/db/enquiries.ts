@@ -1,4 +1,5 @@
 import { db } from "./client";
+import { recordEvent } from "./events";
 
 export type NewEnquiry = {
   messageId: string;
@@ -19,7 +20,10 @@ export async function insertEnquiry(e: NewEnquiry): Promise<{ id: string; create
     VALUES (${e.messageId}, ${e.source}, ${e.emailId ?? null}, ${e.subject ?? null}, ${e.body ?? null}, ${e.sender ?? null})
     ON CONFLICT (message_id) DO NOTHING
     RETURNING id`;
-  if (inserted) return { id: inserted.id as string, created: true };
+  if (inserted) {
+    await recordEvent(inserted.id as string, "received", e.source); // the start of the timeline, and "in the system"
+    return { id: inserted.id as string, created: true };
+  }
   const [existing] = await sql`SELECT id FROM enquiries WHERE message_id = ${e.messageId}`;
   return { id: existing.id as string, created: false };
 }
