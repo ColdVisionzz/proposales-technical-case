@@ -25,11 +25,14 @@ describe("parseSender", () => {
 });
 
 describe("quantityFor", () => {
-  test("per-guest products get the guest count", () => expect(quantityFor(3002, 24, 12)).toEqual({ quantity: 24 }));
-  test("per-room products get the room count", () => expect(quantityFor(3003, 24, 12)).toEqual({ quantity: 12 }));
-  test("a product with no rule defaults to one", () => expect(quantityFor(3001, 24, 12)).toEqual({ quantity: 1 }));
+  test("per-guest products get the guest count", () => expect(quantityFor("Lunch", 24, 12)).toEqual({ quantity: 24 }));
+  test("per-room products get the room count", () => expect(quantityFor("Hotel room", 24, 12)).toEqual({ quantity: 12 }));
+  test("a product with no rule defaults to one", () => expect(quantityFor("Meeting room", 24, 12)).toEqual({ quantity: 1 }));
+  test("the title match ignores case and spaces, and ids play no part", () => {
+    expect(quantityFor("  LUNCH ", 24, null)).toEqual({ quantity: 24 });
+  });
   test("a per-room product without a room count falls back to 1 and says so", () => {
-    expect(quantityFor(3003, 24, null)).toEqual({ quantity: 1, missingRooms: true });
+    expect(quantityFor("Hotel room", 24, null)).toEqual({ quantity: 1, missingRooms: true });
   });
 });
 

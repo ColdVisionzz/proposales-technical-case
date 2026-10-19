@@ -8,12 +8,13 @@ import { ENQUIRY_KEY, type CatalogItem, type CreateDraftInput } from "../proposa
 //   per_guest  one per guest (lunch, dinner)
 //   per_room   one per hotel room
 // Products not listed here default to "one" and the salesperson adjusts in Proposales.
-// ponytail: keyed by the sample catalog's ids. Replace with the real account's ids once the probe has run (T3b/R1).
+// Keyed by the English product title, not the id: ids differ from account to account, the seeded titles do not.
+// ponytail: a renamed product silently falls back to "one". Key by a custom field if hotels rename their products.
 export type QuantityRule = "one" | "per_guest" | "per_room";
-export const QUANTITY_RULES: Record<number, QuantityRule> = { 3002: "per_guest", 3003: "per_room", 3004: "per_guest" };
+export const QUANTITY_RULES: Record<string, QuantityRule> = { lunch: "per_guest", "hotel room": "per_room", dinner: "per_guest" };
 
-export function quantityFor(variationId: number, guests: number, rooms: number | null): { quantity: number; missingRooms?: true } {
-  const rule = QUANTITY_RULES[variationId] ?? "one";
+export function quantityFor(title: string, guests: number, rooms: number | null): { quantity: number; missingRooms?: true } {
+  const rule = QUANTITY_RULES[title.trim().toLowerCase()] ?? "one";
   if (rule === "per_guest") return { quantity: guests };
   if (rule === "per_room") return rooms ? { quantity: rooms } : { quantity: 1, missingRooms: true };
   return { quantity: 1 };
@@ -61,7 +62,7 @@ export function buildDraft({ enquiryKey, companyId, validated: v, flags, catalog
   const guests = v.guests.value as number; // decide() only lets a draft through with guests and a start date
   const notes: Flag[] = [];
   const blocks = v.products.map((p) => {
-    const { quantity, missingRooms } = quantityFor(p.variationId, guests, v.rooms.value);
+    const { quantity, missingRooms } = quantityFor(titleOf(p.variationId), guests, v.rooms.value);
     if (missingRooms) {
       notes.push({ field: "products", level: "check", message: `"${titleOf(p.variationId)}" is priced per room but the email gives no room count: quantity set to 1, check it` });
     }
