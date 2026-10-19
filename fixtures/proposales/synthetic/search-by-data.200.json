@@ -1,18 +1,18 @@
 {
   "data": [
     {
-      "created_at": 1760001000,
-      "updated_at": 1760001000,
+      "created_at": 1760001000000,
+      "updated_at": 1760001000000,
       "title": "Offer for Acme AB: 12 guests, 12 to 13 March",
       "uuid": "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
       "series_uuid": "99999999-8888-4777-8666-555555555555",
       "company_id": 1001,
-      "version": 1,
+      "version": null,
       "status": "draft",
       "data": {
         "enquiry_key": "11111111-2222-3333-4444-555555555555"
       },
-      "url": "https://app.proposales.com/proposal/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+      "url": "https://secure.proposales.com/proposals/aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee/edit"
     }
   ]
 }

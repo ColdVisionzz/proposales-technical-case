@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import Ajv from "ajv";
 import addFormats from "ajv-formats";
@@ -34,9 +34,18 @@ const fixtures: Record<string, string> = {
   "error.500.json": errorBody,
 };
 
+// Where the live API is known to break its own spec (seen by the probe, 2026-10-19). Only these exact fields are
+// forgiven, so a new disagreement still fails.
+const specDeviations: Record<string, string[]> = {
+  "companies.200.json": ["/timezone", "/website_url"], // timezone is null and website_url is "" for a new account
+};
+
 const validate = (file: string, data: unknown) => {
   const check = ajv.compile({ $ref: fixtures[file] });
-  return { ok: check(data), errors: ajv.errorsText(check.errors) };
+  check(data);
+  const allowed = specDeviations[file] ?? [];
+  const errors = (check.errors ?? []).filter((e) => !allowed.some((a) => e.instancePath.endsWith(a)));
+  return { ok: errors.length === 0, errors: ajv.errorsText(errors) };
 };
 
 describe("synthetic Proposales fixtures match the OpenAPI file", () => {
@@ -61,5 +70,28 @@ describe("synthetic Proposales fixtures match the OpenAPI file", () => {
     const broken = read(join(dir, "synthetic", "search-by-data.200.json"));
     broken.data[0].status = "pending";
     expect(validate("search-by-data.200.json", broken).ok).toBe(false);
+  });
+});
+
+// What the live API really returned (npm run probe). The same schemas apply: if the API drifts from the spec, this fails.
+const realDir = join(dir, "real");
+const realFixtures: Record<string, string> = {
+  ...fixtures,
+  "create-minimal.request.json": fixtures["create-proposal.request.json"],
+  "create-proposal-productids.request.json": fixtures["create-proposal.request.json"],
+  "create-minimal.200.json": fixtures["create-proposal.200.json"],
+  "create-proposal-duplicate.200.json": fixtures["create-proposal.200.json"],
+  "create-proposal-productids.200.json": fixtures["create-proposal.200.json"],
+  "search-by-data-after-duplicate.200.json": fixtures["search-by-data.200.json"],
+};
+
+describe.skipIf(!existsSync(realDir))("real Proposales fixtures match the OpenAPI file", () => {
+  const files = existsSync(realDir) ? readdirSync(realDir).filter((f) => f.endsWith(".json") && realFixtures[f]) : [];
+  test.each(files)("%s", (file) => {
+    const check = ajv.compile({ $ref: realFixtures[file] });
+    check(read(join(realDir, file)));
+    const allowed = specDeviations[file] ?? [];
+    const errors = (check.errors ?? []).filter((e) => !allowed.some((a) => e.instancePath.endsWith(a)));
+    expect(errors.length, ajv.errorsText(errors)).toBe(0);
   });
 });

@@ -1,0 +1,28 @@
+{
+  "company_id": 5507,
+  "language": "en",
+  "title_md": "[PROBE] with product ids",
+  "description_md": "Created by the probe script. Safe to delete. Never sent.",
+  "recipient": {
+    "first_name": "Probe",
+    "last_name": "Test",
+    "email": "probe-b@example.com",
+    "company_name": "Probe AB"
+  },
+  "data": {
+    "enquiry_key": "c4da2141-a880-4619-8ff1-469772535a5b",
+    "probe": "true"
+  },
+  "blocks": [
+    {
+      "type": "product-block",
+      "content_id": 191002,
+      "quantity": 1
+    },
+    {
+      "type": "product-block",
+      "content_id": 191003,
+      "quantity": 12
+    }
+  ]
+}

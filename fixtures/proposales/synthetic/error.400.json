@@ -1,13 +1,21 @@
 {
   "error": {
-    "message": "The request could not be validated.",
-    "code": "INVALID_RECIPIENT",
     "issues": [
       {
-        "code": "invalid_string",
-        "path": ["recipient", "email"],
-        "message": "Invalid email"
+        "code": "invalid_type",
+        "expected": "number",
+        "received": "undefined",
+        "path": ["company_id"],
+        "message": "Value: undefined"
+      },
+      {
+        "code": "invalid_type",
+        "expected": "string",
+        "received": "undefined",
+        "path": ["language"],
+        "message": "Value: undefined"
       }
-    ]
+    ],
+    "message": "Validation error: Value: undefined at \"company_id\"; Value: undefined at \"language\""
   }
 }

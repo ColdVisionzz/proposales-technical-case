@@ -1,5 +1,5 @@
 {
   "error": {
-    "message": "The API token is missing or invalid."
+    "message": "Unauthorized"
   }
 }

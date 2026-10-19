@@ -19,7 +19,19 @@ They exist so the pipeline can be built and tested before API access exists. Onc
 | `error.500.json` | `ErrorResponse` |
 | `error.429.json` | `ErrorResponse`. **Assumption:** the spec documents no 429 response. The shape is guessed from the other error bodies. Replace it with a real one if the probe ever sees a 429 |
 
+## Aligned with the real API (2026-10-19)
+
+After the first probe run (`../real/`), these synthetic values were changed to match what Proposales really returns:
+
+- Timestamps (`created_at`, `updated_at`) are **milliseconds**, not seconds.
+- Draft `url` is `https://secure.proposales.com/proposals/<uuid>/edit`.
+- `version` is `null` on a fresh draft.
+- `GET /v3/companies` on a new account: `inbox_token` null, `timezone` null, `registration_number` and `website_url` are `""`. The last two break the spec (`timezone` must be a string, `website_url` a URI), so `tests/proposales-fixtures.test.ts` forgives exactly those fields.
+- Error bodies: `error.issues[]` carry `expected` and `received`, and there is no `code`. A 401 says `Unauthorized`.
+
+Not mirrored in the fake: sending a `product_id` as `content_id` is accepted but yields a draft with **zero blocks**. Only `variation_id` works.
+
 ## What the spec does not tell us
 
-- The search fixtures show a match, but the spec does not say how soon a freshly created draft becomes searchable, or whether `filter[property_name]` finds a value in `data`. Only the probe can answer that.
+- Search lag and whether `data` is searchable: answered by the probe (found after 0.2 s, by `data.enquiry_key` and by recipient email).
 - Error `message` and `code` texts are examples. Only the shape is specified.

@@ -1,0 +1,19 @@
+{
+  "data": [
+    {
+      "created_at": 1792399698823,
+      "updated_at": 1792399698823,
+      "uuid": "b711a6c8-f757-4117-9923-41841e0041e9",
+      "series_uuid": "73d6c06c-e056-422d-8e0e-0804cbbc37e9",
+      "data": {
+        "probe": "true",
+        "enquiry_key": "64ae0a60-d699-449b-9f6e-db29f23a5908"
+      },
+      "status": "draft",
+      "company_id": 5507,
+      "version": null,
+      "title": "[PROBE] with variation ids",
+      "url": "https://secure.proposales.com/proposals/b711a6c8-f757-4117-9923-41841e0041e9/edit"
+    }
+  ]
+}

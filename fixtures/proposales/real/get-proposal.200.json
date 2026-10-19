@@ -1,0 +1,146 @@
+{
+  "data": {
+    "archived_at": null,
+    "attachments": [],
+    "background_image": null,
+    "background_video": null,
+    "blocks": [
+      {
+        "type": "product-block",
+        "unit": "day",
+        "uuid": "4f870e7f-0212-4354-89dc-7aa6cbf386b3",
+        "title": "Meeting room",
+        "currency": "EUR",
+        "language": "en",
+        "quantity": 1,
+        "content_id": 190929,
+        "updated_at": "2026-10-19T08:41:59.836751+00:00",
+        "description": "Bright meeting room for up to 30 people, projector included.‎",
+        "image_uuids": [
+          "66fd7231-4030-4d5b-9dbb-bd1da9819abb"
+        ],
+        "package_split": [
+          {
+            "vat": 0,
+            "type": "other",
+            "fixed": false,
+            "value_with_tax": 20000,
+            "enable_discount": true,
+            "value_without_tax": 20000,
+            "value_saved_with_tax": false
+          }
+        ],
+        "inventory_connected": false,
+        "unit_value_with_discount_with_tax": 20000,
+        "unit_value_with_discount_without_tax": 20000,
+        "unit_value_without_discount_with_tax": 20000,
+        "unit_value_without_discount_without_tax": 20000
+      },
+      {
+        "type": "product-block",
+        "unit": "person",
+        "uuid": "682e4452-f497-493f-9ed7-116af1930d1c",
+        "title": "Lunch",
+        "currency": "EUR",
+        "language": "en",
+        "quantity": 12,
+        "content_id": 190930,
+        "updated_at": "2026-10-19T08:44:29.653581+00:00",
+        "description": "Two-course lunch buffet per person.‎",
+        "package_split": [
+          {
+            "vat": 0,
+            "type": "other",
+            "fixed": false,
+            "value_with_tax": 1500,
+            "enable_discount": true,
+            "value_without_tax": 1500,
+            "value_saved_with_tax": false
+          }
+        ],
+        "inventory_connected": false,
+        "unit_value_with_discount_with_tax": 1500,
+        "unit_value_with_discount_without_tax": 1500,
+        "unit_value_without_discount_with_tax": 1500,
+        "unit_value_without_discount_without_tax": 1500
+      }
+    ],
+    "company_address": "",
+    "company_email": "",
+    "company_id": 5507,
+    "company_logo_uuid": null,
+    "company_powerups": {
+      "bookingStatus": {}
+    },
+    "company_powerups_live": {
+      "bookingStatus": {}
+    },
+    "company_name": "Example Hotel",
+    "company_phone": "",
+    "company_registration_number": "",
+    "company_tax_mode_live": "standard",
+    "company_timezone": "Europe/Stockholm",
+    "company_invoicing_form": null,
+    "company_website": "",
+    "contact_avatar_uuid": null,
+    "contact_email": "owner@hotel.example.com",
+    "contact_id": 1000,
+    "contact_name": "Example Owner",
+    "contact_phone": null,
+    "contact_title": "",
+    "creator_id": 1000,
+    "creator_name": "Example Owner",
+    "currency": "EUR",
+    "data": {
+      "probe": "true",
+      "enquiry_key": "64ae0a60-d699-449b-9f6e-db29f23a5908"
+    },
+    "description_md": "Created by the probe script. Safe to delete. Never sent.",
+    "editor": {
+      "notification_user_ids": [
+        1000
+      ]
+    },
+    "expires_at": null,
+    "invoicing": {},
+    "is_agreement": null,
+    "is_only_proposal_in_series": true,
+    "has_been_sent": false,
+    "is_test": false,
+    "language": "en",
+    "pending": null,
+    "pending_reason": null,
+    "recipient_company_name": "Probe AB",
+    "recipient_email": "probe-a@example.com",
+    "recipient_id": 1322063,
+    "recipient_is_set": true,
+    "recipient_name": "Probe Test",
+    "recipient_first_name": "Probe",
+    "recipient_last_name": "Test",
+    "recipient_phone": null,
+    "recipient_sources": null,
+    "series_uuid": "73d6c06c-e056-422d-8e0e-0804cbbc37e9",
+    "signatures": [],
+    "status_changed_at": 1792399698823,
+    "status": "draft",
+    "tax_options": {
+      "mode": "standard",
+      "tax_included": false
+    },
+    "discount_decimals": 0,
+    "title_md": "[PROBE] with variation ids",
+    "tracking": {},
+    "updated_at": 1792399698823,
+    "uuid": "b711a6c8-f757-4117-9923-41841e0041e9",
+    "value_with_tax": 38000,
+    "value_without_tax": 38000,
+    "version": null,
+    "payments_enabled": false,
+    "description_html": "<p>Created by the probe script. Safe to delete. Never sent.</p>",
+    "title": "[PROBE] with variation ids",
+    "contact_avatar_transform": null,
+    "user_email": "owner@hotel.example.com",
+    "payment": null,
+    "pdf_url": null
+  }
+}

@@ -37,7 +37,7 @@ export function createFakeGateway(catalog: CatalogItem[] = []) {
     async createDraft(input) {
       throwQueued("createDraft");
       const uuid = crypto.randomUUID();
-      const draft = { uuid, url: `https://fake.proposales.test/proposal/${uuid}`, input: structuredClone(input) };
+      const draft = { uuid, url: `https://fake.proposales.test/proposals/${uuid}/edit`, input: structuredClone(input) };
       drafts.push(draft);
       if (crashAfterCreate > 0) {
         crashAfterCreate--;

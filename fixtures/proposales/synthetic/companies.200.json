@@ -3,15 +3,15 @@
     {
       "id": 1001,
       "name": "Example Hotel",
-      "currency": "SEK",
+      "currency": "EUR",
       "tax_mode": "standard",
-      "timezone": "Europe/Stockholm",
+      "timezone": null,
       "discount_decimals": 0,
-      "registration_number": null,
-      "website_url": "https://hotel.example.com",
+      "registration_number": "",
+      "website_url": "",
       "logo_url": null,
-      "inbox_token": "example-inbox-token",
-      "created_at": 1760000000
+      "inbox_token": null,
+      "created_at": 1760000000000
     }
   ]
 }

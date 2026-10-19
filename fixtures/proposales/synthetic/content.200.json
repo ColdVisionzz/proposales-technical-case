@@ -1,7 +1,7 @@
 {
   "data": [
     {
-      "created_at": 1760000100,
+      "created_at": 1760000100000,
       "description": { "en": "Bright meeting room for up to 30 people, projector included." },
       "deactivated_at": null,
       "product_id": 2001,
@@ -11,7 +11,7 @@
       "integration_metadata": null
     },
     {
-      "created_at": 1760000200,
+      "created_at": 1760000200000,
       "description": { "en": "Two-course lunch buffet per person." },
       "deactivated_at": null,
       "product_id": 2002,
@@ -21,7 +21,7 @@
       "integration_metadata": null
     },
     {
-      "created_at": 1760000300,
+      "created_at": 1760000300000,
       "description": { "en": "Standard double room, breakfast included." },
       "deactivated_at": null,
       "product_id": 2003,

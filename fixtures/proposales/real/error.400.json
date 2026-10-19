@@ -1,0 +1,25 @@
+{
+  "error": {
+    "issues": [
+      {
+        "code": "invalid_type",
+        "expected": "number",
+        "received": "undefined",
+        "path": [
+          "company_id"
+        ],
+        "message": "Value: undefined"
+      },
+      {
+        "code": "invalid_type",
+        "expected": "string",
+        "received": "undefined",
+        "path": [
+          "language"
+        ],
+        "message": "Value: undefined"
+      }
+    ],
+    "message": "Validation error: Value: undefined at \"company_id\"; Value: undefined at \"language\""
+  }
+}

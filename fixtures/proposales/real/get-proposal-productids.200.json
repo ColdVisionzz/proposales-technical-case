@@ -1,0 +1,86 @@
+{
+  "data": {
+    "archived_at": null,
+    "attachments": [],
+    "background_image": null,
+    "background_video": null,
+    "blocks": [],
+    "company_address": "",
+    "company_email": "",
+    "company_id": 5507,
+    "company_logo_uuid": null,
+    "company_powerups": {
+      "bookingStatus": {}
+    },
+    "company_powerups_live": {
+      "bookingStatus": {}
+    },
+    "company_name": "Example Hotel",
+    "company_phone": "",
+    "company_registration_number": "",
+    "company_tax_mode_live": "standard",
+    "company_timezone": "Europe/Stockholm",
+    "company_invoicing_form": null,
+    "company_website": "",
+    "contact_avatar_uuid": null,
+    "contact_email": "owner@hotel.example.com",
+    "contact_id": 1000,
+    "contact_name": "Example Owner",
+    "contact_phone": null,
+    "contact_title": "",
+    "creator_id": 1000,
+    "creator_name": "Example Owner",
+    "currency": "EUR",
+    "data": {
+      "probe": "true",
+      "enquiry_key": "c4da2141-a880-4619-8ff1-469772535a5b"
+    },
+    "description_md": "Created by the probe script. Safe to delete. Never sent.",
+    "editor": {
+      "notification_user_ids": [
+        1000
+      ]
+    },
+    "expires_at": null,
+    "invoicing": {},
+    "is_agreement": null,
+    "is_only_proposal_in_series": true,
+    "has_been_sent": false,
+    "is_test": false,
+    "language": "en",
+    "pending": null,
+    "pending_reason": null,
+    "recipient_company_name": "Probe AB",
+    "recipient_email": "probe-b@example.com",
+    "recipient_id": 1322064,
+    "recipient_is_set": true,
+    "recipient_name": "Probe Test",
+    "recipient_first_name": "Probe",
+    "recipient_last_name": "Test",
+    "recipient_phone": null,
+    "recipient_sources": null,
+    "series_uuid": "3bb1808a-4d0b-4cb0-a67d-bd2127d4899c",
+    "signatures": [],
+    "status_changed_at": 1792399699032,
+    "status": "draft",
+    "tax_options": {
+      "mode": "standard",
+      "tax_included": false
+    },
+    "discount_decimals": 0,
+    "title_md": "[PROBE] with product ids",
+    "tracking": {},
+    "updated_at": 1792399699032,
+    "uuid": "2db73040-84ad-4ae1-b1af-a25c177f5d35",
+    "value_with_tax": 0,
+    "value_without_tax": 0,
+    "version": null,
+    "payments_enabled": false,
+    "description_html": "<p>Created by the probe script. Safe to delete. Never sent.</p>",
+    "title": "[PROBE] with product ids",
+    "contact_avatar_transform": null,
+    "user_email": "owner@hotel.example.com",
+    "payment": null,
+    "pdf_url": null
+  }
+}

@@ -10,6 +10,16 @@ export function redact(text: string, secrets: Array<string | null | undefined>):
   return out;
 }
 
+// Replace personal data (the account owner's name and email, the company name) with a fixed placeholder, so a saved
+// fixture can be committed to a public repo. Unlike redact, the placeholder keeps the value readable and the right type.
+// Longer values go first, so a name is not half-replaced by a shorter one inside it.
+export function scrub(text: string, replacements: Array<[string | null | undefined, string]>): string {
+  let out = text;
+  const usable = replacements.filter((r): r is [string, string] => typeof r[0] === "string" && r[0].length >= 4);
+  for (const [value, placeholder] of usable.sort((a, b) => b[0].length - a[0].length)) out = out.split(value).join(placeholder);
+  return out;
+}
+
 // The "shape" of a JSON value: every path with the type found there, e.g. "$.data[].id:number".
 // Values are ignored on purpose. Two answers with the same shape agree, whatever the ids and names are.
 export function shape(value: unknown, path = "$", out = new Set<string>()): Set<string> {

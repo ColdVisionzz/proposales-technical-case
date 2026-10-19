@@ -1,0 +1,74 @@
+{
+  "data": [
+    {
+      "variation_id": 190929,
+      "product_id": 191002,
+      "created_at": 1792399293181,
+      "deactivated_at": null,
+      "integration_metadata": null,
+      "integration_id": null,
+      "description": {
+        "en": "Bright meeting room for up to 30 people, projector included.‎"
+      },
+      "title": {
+        "en": "Meeting room"
+      }
+    },
+    {
+      "variation_id": 190930,
+      "product_id": 191003,
+      "created_at": 1792399449663,
+      "deactivated_at": null,
+      "integration_metadata": null,
+      "integration_id": null,
+      "description": {
+        "en": "Two-course lunch buffet per person.‎"
+      },
+      "title": {
+        "en": "Lunch"
+      }
+    },
+    {
+      "variation_id": 190931,
+      "product_id": 191004,
+      "created_at": 1792399472905,
+      "deactivated_at": null,
+      "integration_metadata": null,
+      "integration_id": null,
+      "description": {
+        "en": "Standard double room, breakfast included.‎"
+      },
+      "title": {
+        "en": "Hotel room"
+      }
+    },
+    {
+      "variation_id": 190932,
+      "product_id": 191005,
+      "created_at": 1792399512578,
+      "deactivated_at": null,
+      "integration_metadata": null,
+      "integration_id": null,
+      "description": {
+        "en": "Three-course dinner per person.‎"
+      },
+      "title": {
+        "en": "Dinner"
+      }
+    },
+    {
+      "variation_id": 190933,
+      "product_id": 191006,
+      "created_at": 1792399524964,
+      "deactivated_at": null,
+      "integration_metadata": null,
+      "integration_id": null,
+      "description": {
+        "en": "Projector, screen, microphones and a technician.‎"
+      },
+      "title": {
+        "en": "AV package"
+      }
+    }
+  ]
+}

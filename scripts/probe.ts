@@ -10,7 +10,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { loadDotEnv } from "../lib/db/env";
-import { redact, shapeDiff } from "./probe-lib";
+import { redact, scrub, shapeDiff } from "./probe-lib";
 
 export type ProbeOptions = {
   baseUrl: string;
@@ -52,11 +52,14 @@ export async function runProbe(o: ProbeOptions): Promise<{ report: string; faile
   const pollMax = o.pollMaxMs ?? 60_000;
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
   const secrets: Array<string | null | undefined> = [o.apiKey];
+  // Personal data of the account, learned from the answers as they arrive and replaced before anything is written.
+  const personal: Array<[string | null | undefined, string]> = [];
+  const clean = (text: string) => scrub(redact(text, secrets), personal);
   mkdirSync(o.outDir, { recursive: true });
 
   const saved: string[] = [];
   const save = (file: string, body: unknown) => {
-    writeFileSync(join(o.outDir, file), redact(JSON.stringify(body, null, 2), secrets) + "\n");
+    writeFileSync(join(o.outDir, file), clean(JSON.stringify(body, null, 2)) + "\n");
     saved.push(file);
   };
 
@@ -116,6 +119,7 @@ export async function runProbe(o: ProbeOptions): Promise<{ report: string; faile
     writeFileSync(join(o.outDir, "probe-report.md"), report);
     return { report, failed: true };
   }
+  personal.push([at(list(companies.body)[0], "name") as string | undefined, "Example Hotel"]);
   save("companies.200.json", { ...(companies.body as object), data: list(companies.body).map((c) => ({ ...(c as object), inbox_token: at(c, "inbox_token") ? "REDACTED" : null })) });
   const company = (o.companyId ? list(companies.body).find((c) => at(c, "id") === o.companyId) : undefined) ?? list(companies.body)[0];
   const companyId = Number(at(company, "id"));
@@ -192,6 +196,12 @@ export async function runProbe(o: ProbeOptions): Promise<{ report: string; faile
     const got = await call("GET", `/v3/proposals/${uuid}`);
     note(`get-${label.replace(" ", "-")}`, got);
     if (ok(got)) {
+      personal.push(
+        [at(got.body, "data", "company_name") as string | undefined, "Example Hotel"],
+        [at(got.body, "data", "creator_name") as string | undefined, "Example Owner"],
+        [at(got.body, "data", "contact_email") as string | undefined, "owner@hotel.example.com"],
+        [at(got.body, "data", "user_email") as string | undefined, "owner@hotel.example.com"],
+      );
       save(file, got.body);
       readBack[label] = describeBlocks(got.body);
     }
@@ -309,7 +319,7 @@ export async function runProbe(o: ProbeOptions): Promise<{ report: string; faile
     ...saved.map((f) => `- ${f}`),
     "",
   ].join("\n");
-  writeFileSync(join(o.outDir, "probe-report.md"), redact(report, secrets));
+  writeFileSync(join(o.outDir, "probe-report.md"), clean(report));
   return { report, failed: unexpected.length > 0 };
 }
 

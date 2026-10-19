@@ -1,0 +1,17 @@
+{
+  "data": [
+    {
+      "id": 5507,
+      "name": "Example Hotel",
+      "currency": "EUR",
+      "tax_mode": "standard",
+      "timezone": null,
+      "discount_decimals": 0,
+      "registration_number": "",
+      "website_url": "",
+      "created_at": 1792396959567,
+      "logo_url": null,
+      "inbox_token": null
+    }
+  ]
+}

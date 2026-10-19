@@ -5,7 +5,7 @@ import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "vitest";
-import { redact, shapeDiff } from "../scripts/probe-lib";
+import { redact, scrub, shapeDiff } from "../scripts/probe-lib";
 import { PLAN, runProbe } from "../scripts/probe";
 
 const syntheticDir = join(__dirname, "..", "fixtures", "proposales", "synthetic");
@@ -17,6 +17,9 @@ const INBOX_TOKEN = "secret-inbox-token-123";
 
 type Seen = { method: string; path: string; authorization?: string; body?: unknown };
 type MockOptions = { catalog?: unknown[]; lagMs?: number; inboxToken?: string | null; inboxCreatesDraft?: boolean; createFailsWith?: number };
+
+// The account owner, as a real server would reveal them in its answers.
+const PERSON = { company: "Jane Doe Hotels", name: "Jane Doe", email: "jane.doe@doehotels.example" };
 
 async function readBody(req: IncomingMessage) {
   let text = "";
@@ -49,6 +52,7 @@ function startMock(options: MockOptions = {}) {
 
     if (url.pathname === "/v3/companies") {
       const companies = synthetic("companies.200.json");
+      companies.data[0].name = PERSON.company;
       companies.data[0].inbox_token = options.inboxToken === undefined ? INBOX_TOKEN : options.inboxToken;
       return send(200, companies);
     }
@@ -65,7 +69,7 @@ function startMock(options: MockOptions = {}) {
       const draft = drafts.find((d) => d.uuid === one[1]);
       if (!draft) return send(404, synthetic("error.400.json"));
       const blocks = ((draft.body.blocks as Array<Record<string, unknown>>) ?? []).map((b) => ({ ...b, title: `Block ${String(b.content_id)}` }));
-      return send(200, { data: { uuid: draft.uuid, company_id: 1001, language: "en", attachments: [], blocks, data: draft.body.data ?? {} } });
+      return send(200, { data: { uuid: draft.uuid, company_id: 1001, language: "en", attachments: [], blocks, data: draft.body.data ?? {}, company_name: PERSON.company, creator_name: PERSON.name, contact_email: PERSON.email, user_email: PERSON.email } });
     }
     if (url.pathname === "/v3/proposal-search") {
       const key = url.searchParams.get("filter[enquiry_key]");
@@ -233,9 +237,25 @@ describe("when things are missing or wrong", () => {
   });
 });
 
+describe("personal data", () => {
+  test("the owner's name, email and company name never reach a saved file, and the data is still there as placeholders", async () => {
+    const run = await probe();
+    for (const file of run.files) {
+      for (const value of Object.values(PERSON)) expect(run.read(file), `${file} leaks ${value}`).not.toContain(value);
+    }
+    expect(JSON.parse(run.read("companies.200.json")).data[0].name).toBe("Example Hotel");
+    const got = JSON.parse(run.read("get-proposal.200.json")).data;
+    expect([got.company_name, got.creator_name, got.contact_email]).toEqual(["Example Hotel", "Example Owner", "owner@hotel.example.com"]);
+  });
+});
+
 describe("helpers", () => {
   test("redact replaces every occurrence of every secret and ignores empty ones", () => {
     expect(redact("a SECRET b SECRET c TOKEN", ["SECRET", "TOKEN", null, undefined, ""])).toBe("a REDACTED b REDACTED c REDACTED");
+  });
+
+  test("scrub replaces personal data, longest value first, and ignores empty or short ones", () => {
+    expect(scrub("Jane Doe Hotels / Jane Doe / jane@x.io", [["Jane Doe", "Owner"], ["Jane Doe Hotels", "Hotel"], ["jane@x.io", "o@h.example"], [null, "x"], ["ab", "y"]])).toBe("Hotel / Owner / o@h.example");
   });
 
   test("shapeDiff: same shape with different values agrees", () => {
