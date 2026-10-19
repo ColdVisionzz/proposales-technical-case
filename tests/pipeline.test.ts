@@ -11,7 +11,8 @@ import { claimEnquiry, finishDraft, insertEnquiry, LostLeaseError, saveBody } fr
 import { MAX_EMAIL_CHARS } from "../lib/email/text";
 import { classifyHttp, GatewayError } from "../lib/proposales/errors";
 import { createFakeGateway } from "../lib/proposales/fake";
-import { processEnquiry, RETRY_DELAY_SECONDS, type Deps } from "../lib/pipeline/process";
+import { processEnquiry, type Deps } from "../lib/pipeline/process";
+import { BACKOFF_SECONDS, MAX_MODEL_TRIES, MAX_TRIES } from "../lib/pipeline/retry";
 import { catalog, clean, email, f, TODAY } from "./extraction.fixtures";
 
 let sql: postgres.Sql;
@@ -247,28 +248,28 @@ describe("the claim", () => {
 
   test("an expired lease can be taken over, a live one cannot", async () => {
     const id = await addPaste();
-    expect(await claimEnquiry(id)).toMatchObject({ attempt: 1 });
-    expect(await claimEnquiry(id)).toBeNull(); // lease still running
+    expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: 1 });
+    expect(await claimEnquiry(id, MAX_TRIES)).toBeNull(); // lease still running
     await sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
-    expect(await claimEnquiry(id)).toMatchObject({ attempt: 2 }); // worker crashed, lease ran out
+    expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: 2 }); // worker crashed, lease ran out
   });
 
   test("a retrying row is claimable only once its time has come", async () => {
     const id = await addPaste();
     await sql`UPDATE enquiries SET status = 'retrying', next_attempt_at = now() + interval '1 minute' WHERE id = ${id}`;
-    expect(await claimEnquiry(id)).toBeNull();
+    expect(await claimEnquiry(id, MAX_TRIES)).toBeNull();
     await makeDue(id);
-    expect(await claimEnquiry(id)).not.toBeNull();
+    expect(await claimEnquiry(id, MAX_TRIES)).not.toBeNull();
   });
 
   test.each(["draft_created", "needs_review", "failed_permanent", "ignored"])("a %s row is never claimed again", async (status) => {
     const id = await addPaste();
     await sql`UPDATE enquiries SET status = ${status} WHERE id = ${id}`;
-    expect(await claimEnquiry(id)).toBeNull();
+    expect(await claimEnquiry(id, MAX_TRIES)).toBeNull();
   });
 
   test("an unknown id claims nothing", async () => {
-    expect(await claimEnquiry("0b9f4c2e-6d1a-4f4e-9a52-3c1d2e7a8b90")).toBeNull();
+    expect(await claimEnquiry("0b9f4c2e-6d1a-4f4e-9a52-3c1d2e7a8b90", MAX_TRIES)).toBeNull();
   });
 });
 
@@ -277,9 +278,9 @@ describe("the claim", () => {
 describe("a worker that lost its lease cannot write", () => {
   test("a stale attempt number is refused by every write, a current one is accepted", async () => {
     const id = await addPaste();
-    await claimEnquiry(id); // attempt 1
+    await claimEnquiry(id, MAX_TRIES); // attempt 1
     await sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
-    await claimEnquiry(id); // attempt 2 takes over
+    await claimEnquiry(id, MAX_TRIES); // attempt 2 takes over
     await expect(saveBody(id, 1, "stale")).rejects.toBeInstanceOf(LostLeaseError);
     await expect(finishDraft(id, 1, { uuid: "0b9f4c2e-6d1a-4f4e-9a52-3c1d2e7a8b90", url: "https://x" }, { flags: [], reasons: [] })).rejects.toBeInstanceOf(LostLeaseError);
     expect(await row(id)).toMatchObject({ status: "processing", proposal_uuid: null });
@@ -293,7 +294,7 @@ describe("a worker that lost its lease cannot write", () => {
     // While worker A is inside the model call its lease runs out and worker B claims the row.
     const takeover = vi.fn(async () => {
       await sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
-      expect(await claimEnquiry(id)).toMatchObject({ attempt: 2 });
+      expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: 2 });
       return { status: "ok" as const, extraction: clean(), meta: { model: "A", promptVersion: "v2", ms: 1, attempts: 1 } };
     });
     const result = await processEnquiry(id, { ...deps, extract: takeover as unknown as Deps["extract"] });
@@ -314,8 +315,9 @@ describe("failures", () => {
     expect(await processEnquiry(id, deps)).toBe("retrying");
     expect(await row(id)).toMatchObject({ status: "retrying", last_error: "retryable: upstream_503", locked_until: null });
     const [{ secs }] = await sql`SELECT extract(epoch FROM next_attempt_at - now())::float AS secs FROM enquiries WHERE id = ${id}`;
-    expect(secs).toBeGreaterThan(RETRY_DELAY_SECONDS - 5);
-    expect(secs).toBeLessThanOrEqual(RETRY_DELAY_SECONDS);
+    // first try failed: the first backoff step, plus or minus 10% jitter (and a little time spent since)
+    expect(secs).toBeGreaterThan(BACKOFF_SECONDS[0] * 0.9 - 5);
+    expect(secs).toBeLessThanOrEqual(BACKOFF_SECONDS[0] * 1.1);
     expect(await processEnquiry(id, deps)).toBe("not_claimed");
     expect(fake.drafts).toHaveLength(0);
   });
@@ -368,5 +370,84 @@ describe("failures", () => {
     const { deps } = setup({ extract: leaky as unknown as Deps["extract"] });
     await processEnquiry(id, deps);
     expect((await row(id)).last_error).not.toContain("meeting room");
+  });
+});
+
+// ---- T14: backoff, Retry-After and the attempt cap, one test per failure-matrix row --------------------------------------
+
+describe("retries and the cap", () => {
+  // Pretend the row has already been tried n - 1 times, so the next claim is try number n.
+  const asTryNumber = (id: string, n: number) => sql`UPDATE enquiries SET tries = ${n - 1} WHERE id = ${id}`;
+  const secondsUntilDue = async (id: string) =>
+    (await sql`SELECT extract(epoch FROM next_attempt_at - now())::float AS secs FROM enquiries WHERE id = ${id}`)[0].secs as number;
+  const modelDown = (status: number) =>
+    vi.fn(async () => {
+      throw Object.assign(new Error("model down"), { statusCode: status });
+    }) as unknown as Deps["extract"];
+
+  test.each([
+    [1, BACKOFF_SECONDS[0]],
+    [2, BACKOFF_SECONDS[1]],
+    [3, BACKOFF_SECONDS[2]],
+    [4, BACKOFF_SECONDS[3]],
+  ])("Proposales 503 on try %i parks the row for about %i s (plus or minus 10%%)", async (n, base) => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    await asTryNumber(id, n);
+    fake.failNext("createDraft", classifyHttp(503));
+    expect(await processEnquiry(id, deps)).toBe("retrying");
+    const secs = await secondsUntilDue(id);
+    expect(secs).toBeGreaterThan(base * 0.9 - 5);
+    expect(secs).toBeLessThanOrEqual(base * 1.1);
+  });
+
+  test("Proposales 503 on the last try gives up with the reason", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    await asTryNumber(id, MAX_TRIES);
+    fake.failNext("createDraft", classifyHttp(503));
+    expect(await processEnquiry(id, deps)).toBe("failed_permanent");
+    expect((await row(id)).last_error).toBe(`gave up after ${MAX_TRIES} tries: retryable: upstream_503`);
+  });
+
+  test("a model error gives up sooner than a Proposales error: try 2 retries, try 3 stops", async () => {
+    const early = await addPaste();
+    await asTryNumber(early, MAX_MODEL_TRIES - 1);
+    expect(await processEnquiry(early, setup({ extract: modelDown(503) }).deps)).toBe("retrying");
+    const last = await addPaste();
+    await asTryNumber(last, MAX_MODEL_TRIES);
+    expect(await processEnquiry(last, setup({ extract: modelDown(503) }).deps)).toBe("failed_permanent");
+    expect((await row(last)).last_error).toBe(`gave up after ${MAX_MODEL_TRIES} tries: retryable: upstream_503`);
+  });
+
+  test("a 429 with Retry-After waits at least as long as the server asked", async () => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    fake.failNext("createDraft", classifyHttp(429, "300"));
+    expect(await processEnquiry(id, deps)).toBe("retrying");
+    expect(await secondsUntilDue(id)).toBeGreaterThan(295); // the 30 s backoff alone would be far shorter
+  });
+
+  test.each([400, 401, 403, 404, 422])("a %i is never retried, even on the first try", async (status) => {
+    const id = await addPaste();
+    const { fake, deps } = setup();
+    fake.failNext("createDraft", classifyHttp(status));
+    expect(await processEnquiry(id, deps)).toBe("failed_permanent");
+    expect((await row(id)).next_attempt_at).toBeNull();
+  });
+
+  test("a database blip mid-pipeline is retryable, not a permanent unknown (T12 finding 4)", async () => {
+    const id = await addPaste();
+    const blip = vi.fn(async () => {
+      throw Object.assign(new Error("connection closed"), { code: "CONNECTION_CLOSED" });
+    });
+    expect(await processEnquiry(id, setup({ extract: blip as unknown as Deps["extract"] }).deps)).toBe("retrying");
+    expect((await row(id)).last_error).toBe("retryable: database");
+  });
+
+  test("a row with no tries left is not claimed, however it got there (crashes count, not only caught errors)", async () => {
+    const id = await addPaste();
+    await asTryNumber(id, MAX_TRIES + 1); // five claims already happened, all without a caught failure
+    expect(await processEnquiry(id, setup().deps)).toBe("not_claimed");
   });
 });

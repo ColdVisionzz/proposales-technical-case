@@ -34,23 +34,28 @@ export type ClaimedEnquiry = {
   body: string | null;
   sender: string | null;
   extracted: unknown;
-  attempt: number; // the fencing token: every later write must present this exact value
+  attempt: number; // the fencing token: every later write must present this exact value. Never resets.
+  tries: number; // claims since the last manual reset, this one included: what the attempt cap reads
 };
 
 // Guarantee 2: one atomic statement decides who owns the row. Never a SELECT followed by an UPDATE.
 // The winner gets the row back; everyone else gets nothing. attempts + 1 also becomes the winner's fencing token.
-export async function claimEnquiry(id: string): Promise<ClaimedEnquiry | null> {
+// tries + 1 is what the cap counts. It goes up here, not in a catch block, because a crash runs no code: a row that
+// crashes every time reaches maxTries, stops being claimable, and waits for the sweeper to fail it.
+export async function claimEnquiry(id: string, maxTries: number): Promise<ClaimedEnquiry | null> {
   const [row] = await db()`
     UPDATE enquiries
     SET status = 'processing',
         locked_until = now() + interval '2 minutes',
         attempts = attempts + 1,
+        tries = tries + 1,
         updated_at = now()
     WHERE id = ${id}
+      AND tries < ${maxTries}
       AND ( status = 'queued'
             OR (status = 'retrying' AND next_attempt_at <= now())
             OR (status = 'processing' AND locked_until < now()) )
-    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts`;
+    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts, tries`;
   if (!row) return null;
   return {
     id: row.id,
@@ -61,6 +66,7 @@ export async function claimEnquiry(id: string): Promise<ClaimedEnquiry | null> {
     sender: row.sender,
     extracted: row.extracted,
     attempt: row.attempts,
+    tries: row.tries,
   };
 }
 
@@ -127,6 +133,21 @@ export async function failPermanent(id: string, attempt: number, error: string):
     UPDATE enquiries
     SET status = 'failed_permanent', last_error = ${error}, locked_until = NULL, updated_at = now()
     WHERE id = ${id} AND status = 'processing' AND attempts = ${attempt}`);
+}
+
+// Manual retry: a human re-queues a row that gave up. One statement, and only from failed_permanent, so a second press
+// or a press on a healthy row changes nothing. Resets the try count, never the ticket: `attempts` is left alone so a
+// ticket number is never handed out twice and a stalled old worker still cannot write (T12 finding 1).
+export async function retryEnquiry(id: string): Promise<{ ok: true } | { ok: false; status: string | null }> {
+  const sql = db();
+  const [updated] = await sql`
+    UPDATE enquiries
+    SET status = 'queued', tries = 0, next_attempt_at = NULL, last_error = NULL, locked_until = NULL, updated_at = now()
+    WHERE id = ${id} AND status = 'failed_permanent'
+    RETURNING id`;
+  if (updated) return { ok: true };
+  const [current] = await sql`SELECT status FROM enquiries WHERE id = ${id}`;
+  return { ok: false, status: current ? current.status : null };
 }
 
 // ---- Guarantee 3: human edits ---------------------------------------------------------------------------------------

@@ -11,6 +11,7 @@
 // Dropped connection ("fetch failed")  -> retryable "network"
 // HTTP 401 / 403                       -> permanent "auth", loud (wrong or revoked key)
 // Any other 4xx (400, 404, 422, ...)   -> permanent "bad_request_<status>"
+// Database connection error (postgres.js or socket code, SQLSTATE 08xxx) -> retryable "database"
 // Anything we do not recognise         -> permanent "unknown" (a bug in our code, retrying hides it)
 
 export type Failure =
@@ -45,9 +46,21 @@ export function classifyHttp(status: number, retryAfter?: string | null): Failur
   return { kind: "permanent", reason: `bad_request_${status}` };
 }
 
+// postgres.js and Node both put a string `code` on connection errors. These mean "the database was unreachable for a
+// moment", not "our code is wrong". Neon branches wake up and drop connections, so this does happen.
+const DB_TRANSIENT_CODES = new Set([
+  "CONNECTION_CLOSED", "CONNECTION_DESTROYED", "CONNECTION_ENDED", "CONNECT_TIMEOUT", // postgres.js
+  "ECONNRESET", "ECONNREFUSED", "ETIMEDOUT", "EPIPE", // Node sockets
+  "40001", "40P01", "53300", "57P01", // serialization failure, deadlock, too many connections, admin shutdown
+]);
+
 // For anything that was thrown: a GatewayError, a timeout, a network error, or a bug.
 export function classifyError(error: unknown): Failure {
   if (error instanceof GatewayError) return error.failure;
+  const code = typeof error === "object" && error !== null ? (error as { code?: unknown }).code : undefined;
+  if (typeof code === "string" && (DB_TRANSIENT_CODES.has(code) || code.startsWith("08"))) { // 08xxx: connection exception
+    return { kind: "retryable", reason: "database" };
+  }
   // The AI SDK's API-call errors carry the provider's HTTP status and response headers.
   const status = typeof error === "object" && error !== null ? (error as { statusCode?: unknown }).statusCode : undefined;
   if (typeof status === "number") {

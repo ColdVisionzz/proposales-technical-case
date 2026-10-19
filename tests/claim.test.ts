@@ -7,8 +7,18 @@ import { migrate } from "../lib/db/migrate";
 let current: postgres.Sql;
 vi.mock("../lib/db/client", () => ({ db: () => current }));
 
+// after() only works inside a real request: here it collects the callbacks and the nudge is stubbed out.
+const afterCallbacks = vi.hoisted(() => [] as Array<() => unknown>);
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => void afterCallbacks.push(fn),
+}));
+vi.mock("../lib/queue", () => ({ nudge: vi.fn(async () => {}) }));
+
 import { PATCH } from "../app/api/enquiries/[id]/route";
-import { claimEnquiry, editExtraction, insertEnquiry } from "../lib/db/enquiries";
+import { POST as retryRoute } from "../app/api/enquiries/[id]/retry/route";
+import { claimEnquiry, editExtraction, failPermanent, insertEnquiry, LostLeaseError, retryEnquiry, saveBody } from "../lib/db/enquiries";
+import { MAX_TRIES } from "../lib/pipeline/retry";
 import { clean, email } from "./extraction.fixtures";
 
 let sql: postgres.Sql;
@@ -48,7 +58,7 @@ const setStatus = (id: string, status: string) => sql`UPDATE enquiries SET statu
 describe("the claim under load", () => {
   test("20 claims at the same moment: exactly one wins, the row is claimed once", async () => {
     const id = await addPaste();
-    const results = await Promise.all(Array.from({ length: 20 }, () => claimEnquiry(id)));
+    const results = await Promise.all(Array.from({ length: 20 }, () => claimEnquiry(id, MAX_TRIES)));
     expect(results.filter((r) => r !== null)).toHaveLength(1);
     expect(results.find((r) => r !== null)).toMatchObject({ attempt: 1 });
     expect(await row(id)).toMatchObject({ status: "processing", attempts: 1 });
@@ -130,5 +140,83 @@ describe("PATCH /api/enquiries/[id]", () => {
     ["an extraction that does not fit the schema", MISSING, { extracted: { nonsense: true }, version: 0 }],
   ])("400 for %s", async (_name, id, body) => {
     expect((await patch(id, body)).status).toBe(400);
+  });
+});
+
+// ---- the attempt cap and manual retry (T14) ----------------------------------------------------------------------
+
+const expireLease = (id: string) => sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
+
+describe("crashes count toward the cap", () => {
+  test("a row that keeps crashing stops being claimable after MAX_TRIES claims", async () => {
+    const id = await addPaste();
+    for (let n = 1; n <= MAX_TRIES; n++) {
+      expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: n, tries: n }); // the worker "crashes": nothing is written
+      await expireLease(id);
+    }
+    expect(await claimEnquiry(id, MAX_TRIES)).toBeNull(); // out of tries, so no sixth run
+    expect(await row(id)).toMatchObject({ status: "processing", tries: MAX_TRIES, attempts: MAX_TRIES }); // left for the sweeper (T15)
+  });
+});
+
+describe("manual retry", () => {
+  const fail = async (id: string) => {
+    const claimed = await claimEnquiry(id, MAX_TRIES);
+    await failPermanent(id, claimed!.attempt, "permanent: bad_request_400");
+  };
+
+  test("re-queues a failed row with a fresh try count and an untouched ticket", async () => {
+    const id = await addPaste();
+    await fail(id);
+    expect(await retryEnquiry(id)).toEqual({ ok: true });
+    expect(await row(id)).toMatchObject({ status: "queued", tries: 0, attempts: 1, last_error: null, next_attempt_at: null });
+    expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: 2, tries: 1 }); // ticket 2: ticket 1 is never reused
+  });
+
+  test("a stale worker still cannot write after a manual retry (T12 finding 1)", async () => {
+    const id = await addPaste();
+    const stale = (await claimEnquiry(id, MAX_TRIES))!; // worker A, ticket 1, then it stalls
+    await expireLease(id);
+    const b = (await claimEnquiry(id, MAX_TRIES))!; // worker B takes over, ticket 2, and fails
+    await failPermanent(id, b.attempt, "permanent: bad_request_400");
+    await retryEnquiry(id); // a human presses retry
+    const c = (await claimEnquiry(id, MAX_TRIES))!; // worker C claims the fresh row
+    expect(c.attempt).not.toBe(stale.attempt); // with the old "reset attempts to 0" rule C would get ticket 1 here
+    await expect(saveBody(id, stale.attempt, "stale write")).rejects.toBeInstanceOf(LostLeaseError); // A wakes up: refused
+    expect((await row(id)).raw_body).toBe(email.body); // C's row is untouched
+  });
+
+  test.each(["queued", "processing", "retrying", "draft_created", "needs_review", "ignored"])("a %s row cannot be retried", async (status) => {
+    const id = await addPaste();
+    await setStatus(id, status);
+    expect(await retryEnquiry(id)).toEqual({ ok: false, status });
+    expect(await row(id)).toMatchObject({ status });
+  });
+
+  test("a second press changes nothing", async () => {
+    const id = await addPaste();
+    await fail(id);
+    await retryEnquiry(id);
+    expect(await retryEnquiry(id)).toEqual({ ok: false, status: "queued" });
+  });
+});
+
+describe("POST /api/enquiries/[id]/retry", () => {
+  const post = (id: string) =>
+    retryRoute(new Request(`http://test/api/enquiries/${id}/retry`, { method: "POST" }), { params: Promise.resolve({ id }) });
+
+  test("200 and a nudge for a failed row, 409 for a healthy one, 404 for an unknown id, 400 for a bad id", async () => {
+    const failed = await addPaste();
+    await setStatus(failed, "failed_permanent");
+    afterCallbacks.length = 0;
+    expect((await post(failed)).status).toBe(200);
+    expect(afterCallbacks).toHaveLength(1); // the worker was nudged
+    expect((await row(failed)).status).toBe("queued");
+
+    const res = await post(failed); // second press: it is queued now
+    expect(res.status).toBe(409);
+    expect(await res.json()).toEqual({ error: "conflict", status: "queued" });
+    expect((await post(MISSING)).status).toBe(404);
+    expect((await post("nope")).status).toBe(400);
   });
 });

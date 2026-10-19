@@ -1,4 +1,4 @@
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import postgres from "postgres";
@@ -41,11 +41,13 @@ const tempMigrations = (files: Record<string, string>) => {
 };
 
 describe("migration runner", () => {
-  test("applies 001_init.sql once and is a no-op the second time", async () => {
-    expect(await migrate(url)).toEqual(["001_init.sql"]);
+  test("applies every migrations/*.sql once, in order, and is a no-op the second time", async () => {
+    const files = readdirSync("migrations").filter((f) => f.endsWith(".sql")).sort();
+    expect(files.length).toBeGreaterThan(0);
+    expect(await migrate(url)).toEqual(files);
     expect(await migrate(url)).toEqual([]);
-    const rows = await sql`SELECT name FROM schema_migrations`;
-    expect(rows.map((r) => r.name)).toEqual(["001_init.sql"]);
+    const rows = await sql`SELECT name FROM schema_migrations ORDER BY name`;
+    expect(rows.map((r) => r.name)).toEqual(files);
   });
 
   test("a migration that fails halfway leaves nothing behind and is not recorded", async () => {

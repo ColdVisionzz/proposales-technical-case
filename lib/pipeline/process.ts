@@ -16,6 +16,7 @@ import { validate, type Flag } from "../extraction/validate";
 import { classifyError } from "../proposales/errors";
 import type { ProposalesGateway } from "../proposales/gateway";
 import { buildDraft, parseSender } from "./draft";
+import { exhausted, MAX_TRIES, retryDelaySeconds } from "./retry";
 
 // Everything processEnquiry touches outside the database, passed in so tests can use fakes.
 export type Deps = {
@@ -26,17 +27,15 @@ export type Deps = {
   today: () => string; // YYYY-MM-DD
 };
 
-// A retryable failure waits this long. T14 replaces the constant with backoff and an attempt limit.
-export const RETRY_DELAY_SECONDS = 30;
-
 export type Result = "not_claimed" | "lost_lease" | "ignored" | "needs_review" | "draft_created" | "retrying" | "failed_permanent";
 
 // One function for every caller: webhook nudge, paste, retry button, sweeper.
 // Each step skips itself if its result is already saved, so a crash anywhere repeats only what was not yet saved.
 export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
-  const row = await claimEnquiry(id);
-  if (!row) return "not_claimed"; // someone else owns it, or it is finished or not due yet
-  const { attempt } = row;
+  const row = await claimEnquiry(id, MAX_TRIES);
+  if (!row) return "not_claimed"; // someone else owns it, or it is finished, not due yet, or out of tries
+  const { attempt, tries } = row;
+  let step: "model" | "other" = "other"; // which cap applies if this try fails: model errors cost money, so they give up sooner
 
   try {
     // 2. Body. Email rows arrive without one. Saved as the readable text, so a retry never fetches it again.
@@ -63,7 +62,9 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     const saved = extractionSchema.safeParse(row.extracted);
     let extraction = saved.success ? saved.data : null;
     if (!extraction) {
+      step = "model";
       const result = await deps.extract(email, catalog, today);
+      step = "other";
       if (result.status === "invalid") {
         const reasons = ["Could not read this reliably: the model's answer did not fit the expected shape"];
         await finishWithoutDraft(id, attempt, "needs_review", { flags: [], reasons });
@@ -103,9 +104,10 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     // One central classifier decides. The row records what happened, never the email's words.
     const failure = classifyError(error);
     const message = `${failure.kind}: ${failure.reason}`;
-    if (failure.kind === "retryable") {
+    const giveUp = failure.kind === "retryable" && exhausted(tries, step);
+    if (failure.kind === "retryable" && !giveUp) {
       try {
-        await parkRetrying(id, attempt, message, RETRY_DELAY_SECONDS);
+        await parkRetrying(id, attempt, message, retryDelaySeconds(tries, failure.retryAfterMs));
       } catch (parkError) {
         if (parkError instanceof LostLeaseError) return "lost_lease";
         throw parkError;
@@ -113,7 +115,7 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       return "retrying";
     }
     try {
-      await failPermanent(id, attempt, message);
+      await failPermanent(id, attempt, giveUp ? `gave up after ${tries} tries: ${message}` : message);
     } catch (failError) {
       if (failError instanceof LostLeaseError) return "lost_lease";
       throw failError;
