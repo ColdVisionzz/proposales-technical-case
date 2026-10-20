@@ -2,7 +2,7 @@ import { bearerMatches } from "@/lib/auth";
 import { writeChaos } from "@/lib/db/settings";
 
 // The demo switch: POST { "on": true | false }. With it on, every Proposales call fails with a retryable error until it is
-// switched off. Protected by CRON_SECRET until the password gate (T21) takes over. Fails closed when the secret is unset.
+// switched off. Protected by CRON_SECRET and has no UI (a presenter tool). Fails closed when the secret is unset.
 export async function POST(request: Request) {
   if (!bearerMatches(request.headers.get("authorization"), process.env.CRON_SECRET)) {
     return new Response("unauthorized", { status: 401 });

@@ -127,7 +127,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .rail-fill, .node, .press, .drawer, .drawer::backdrop { transition-duration: 1ms !important; transition-delay: 0s !important; }
-  .rail .node::after, .line-in, .animate-pulse, .fade-in { animation: none !important; }
+  .rail .node::after, .line-in, .animate-pulse, .animate-spin, .fade-in { animation: none !important; }
   .drawer:not([open]) { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {

@@ -12,7 +12,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // "Create draft anyway": the human has filled in what the model could not find. We check the hard rules first so a bad
 // value is refused with a reason (422), then one version-checked UPDATE hands the row back to the queue with override set.
 // Reading first and updating second is safe here: the UPDATE only succeeds if the version is still the one we read, and no
-// worker touches a needs_review row, so what we checked is what gets queued. No gate until T21.
+// worker touches a needs_review row, so what we checked is what gets queued.
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   if (!UUID.test(id)) return Response.json({ error: "id must be a uuid" }, { status: 400 });

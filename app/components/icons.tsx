@@ -81,3 +81,12 @@ export function Doc({ className }: { className?: string }) {
     </svg>
   );
 }
+
+export function Refresh({ className }: { className?: string }) {
+  return (
+    <svg {...base} className={className}>
+      <path d="M13.25 8a5.25 5.25 0 1 1-1.54-3.71" />
+      <path d="M13.25 2.5v2.75h-2.75" />
+    </svg>
+  );
+}

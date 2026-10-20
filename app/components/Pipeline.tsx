@@ -60,29 +60,48 @@ export function Pipeline({ enquiry: e, detail, now }: Props) {
         </div>
       </div>
 
-      <div className="rail-card mt-8 px-5 py-7 md:px-10 md:py-9">
-        <ol className="rail" data-mood={view.mood} style={{ "--p": p } as CSSProperties}>
-          <li className="rail-track" aria-hidden="true">
-            <span className="rail-fill" />
-          </li>
-          {STAGES.map((s, i) => {
-            const state = nodeState(i, stage, view.mood);
-            const Glyph = GLYPH[i];
-            return (
-              <li key={s.label} className="stage" aria-current={i === stage ? "step" : undefined}>
-                <span className="node" data-state={state}>
-                  {state === "problem" ? <Alert /> : <Glyph />}
-                </span>
-                <span className="stage-text">
-                  <span className={`block text-[15px] font-medium ${state === "pending" ? "text-muted" : ""}`}>{s.label}</span>
-                  <span className="block text-sm text-muted">{s.sub}</span>
-                  <span className="num block min-h-4 text-xs text-muted">{times[i] ?? ""}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ol>
+      <Rail mood={view.mood} p={p} stage={stage} times={times} />
+    </section>
+  );
+}
+
+function Rail({ mood, p, stage, times }: { mood: Mood; p: number; stage: number; times: (string | null)[] }) {
+  return (
+    <div className="rail-card mt-8 px-5 py-7 md:px-10 md:pb-7 md:pt-9">
+      <ol className="rail" data-mood={mood} style={{ "--p": p } as CSSProperties}>
+        <li className="rail-track" aria-hidden="true">
+          <span className="rail-fill" />
+        </li>
+        {STAGES.map((s, i) => {
+          const state: NodeState = stage < 0 ? "pending" : nodeState(i, stage, mood);
+          const Glyph = GLYPH[i];
+          return (
+            <li key={s.label} className="stage" aria-current={i === stage ? "step" : undefined}>
+              <span className="node" data-state={state}>
+                {state === "problem" ? <Alert /> : <Glyph />}
+              </span>
+              <span className="stage-text">
+                <span className={`block text-[15px] font-medium ${state === "pending" ? "text-muted" : ""}`}>{s.label}</span>
+                <span className="block text-sm text-muted">{s.sub}</span>
+                <span className="num block min-h-4 text-xs text-muted">{times[i] ?? ""}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+// The hero with nothing to show: the same headline and rail, every stage still waiting.
+export function IdlePipeline({ loading }: { loading: boolean }) {
+  return (
+    <section aria-label="Latest enquiry" aria-busy={loading}>
+      <div aria-live="polite">
+        <h2 className="display text-3xl font-semibold md:text-5xl">Waiting for the next enquiry</h2>
+        <p className="mt-3 max-w-2xl text-pretty text-lg text-muted">Each enquiry travels these four stages, from inbox to draft.</p>
       </div>
+      <Rail mood="waiting" p={0} stage={-1} times={[]} />
     </section>
   );
 }

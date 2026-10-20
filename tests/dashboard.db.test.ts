@@ -65,6 +65,24 @@ describe("listEnquiries", () => {
   });
 });
 
+describe("15 minute visibility window", () => {
+  const age = (id: string, status: string) => sql`UPDATE enquiries SET status = ${status}, updated_at = now() - interval '16 minutes' WHERE id = ${id}`;
+
+  test("old finished rows vanish from the list and the detail; old parked rows stay", async () => {
+    const old = await add(1);
+    const parked = await add(2);
+    const fresh = await add(3);
+    await age(old.id, "draft_created");
+    await age(parked.id, "retrying");
+    const ids = (await listEnquiries()).map((r) => r.id);
+    expect(ids).toContain(parked.id);
+    expect(ids).toContain(fresh.id);
+    expect(ids).not.toContain(old.id);
+    expect(await getEnquiryDetail(old.id)).toBeNull();
+    expect(await getEnquiryDetail(parked.id)).not.toBeNull();
+  });
+});
+
 describe("getEnquiryDetail", () => {
   test("returns the body and the events in the order they happened", async () => {
     const { id } = await add(1);
@@ -103,9 +121,9 @@ describe("email addresses never leave the server", () => {
     ).text();
 
     for (const text of [list, detail, patch]) expect(leaks(text)).toEqual([]);
-    expect(list).toContain("Anna Berg <a***@a***.com>");
-    expect(JSON.parse(detail).body).toContain("please cc b***@a***.com");
-    expect(patch).toContain("b***@a***.com");
+    expect(list).toContain("Anna Berg <a***@acme-hotels.com>");
+    expect(JSON.parse(detail).body).toContain("please cc b***@acme-hotels.com");
+    expect(patch).toContain("b***@acme-hotels.com");
   });
 
   test("the pipeline still reads the real address from the database", async () => {

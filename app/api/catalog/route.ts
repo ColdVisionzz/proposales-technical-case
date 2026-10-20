@@ -4,7 +4,7 @@ import { getGateway } from "@/lib/pipeline/gateway";
 // Product names for the dashboard's booking card, fetched once per page load (not in the 2 s poll).
 // Deliberately NOT behind the chaos wrapper: the demo outage is about creating drafts, and names are display only.
 // The browser keeps the answer for 5 minutes; the screen falls back to "product #id" if this fails.
-// No password gate until T21.
+//
 export async function GET() {
   await connection();
   try {

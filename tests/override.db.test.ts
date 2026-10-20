@@ -143,7 +143,7 @@ describe("a masked address is never saved", () => {
   test("PATCH with masked text is a 400 and the database is unchanged", async () => {
     const real = "Call anna.berg@acme.com after 5";
     const id = await inReview(clean({ specialRequests: f(real, real) }));
-    const res = await save(id, { specialRequests: "Call a***@a***.com after 6" }, 0); // what the screen showed, edited around
+    const res = await save(id, { specialRequests: "Call a***@acme.com after 6" }, 0); // what the screen showed, edited around
     expect(res.status).toBe(400);
     expect(await row(id)).toMatchObject({ version: 0 });
     expect((await row(id)).extracted.specialRequests.value).toBe(real);

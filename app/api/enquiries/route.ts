@@ -7,7 +7,7 @@ import { readChaos } from "@/lib/db/settings";
 //
 // The dashboard's list, polled every 2 s. Summaries only (no email body), newest first, plus the chaos switch so the banner
 // can show it before the health ping has tripped. An unreadable switch counts as off, like everywhere else.
-// No password gate until T21.
+//
 export async function GET() {
   await connection(); // runtime data: never prerendered at build
   try {

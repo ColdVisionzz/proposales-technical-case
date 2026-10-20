@@ -12,7 +12,7 @@ export function DemoIntro({ address }: { address: string }) {
   const qr = useMemo(() => qrPath(href), [href]);
 
   return (
-    <section className="panel fade-in flex min-h-72 flex-col overflow-hidden" aria-labelledby="intro-title">
+    <section className="panel fade-in flex min-h-72 flex-col overflow-y-auto lg:h-[32rem]" aria-labelledby="intro-title">
       <header className="flex items-center justify-between gap-3 border-b border-line bg-background/60 px-5 py-3.5">
         <h3 id="intro-title" className="text-sm font-semibold">
           Try it yourself

@@ -167,13 +167,22 @@ describe("sweep: running twice", () => {
   });
 });
 
-// GET is what Vercel's daily cron sends, POST is "run sweeper now". Same handler, same rules.
-describe.each([
-  ["GET", GET],
-  ["POST", POST],
-])("%s /api/sweeper", (method, route) => {
+// POST is the dashboard button: open to visitors, no secret.
+describe("POST /api/sweeper", () => {
+  test("works without any header, and the stuck row is nudged", async () => {
+    delete process.env.CRON_SECRET;
+    const id = await stuckQueued();
+    const res = await POST(new Request("http://test/api/sweeper", { method: "POST" }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ failed: 0, nudged: 1 });
+    expect(nudged).toHaveBeenCalledWith("http://test/api/sweeper", id);
+  });
+});
+
+// GET is what Vercel's daily cron sends, and it stays behind the secret.
+describe("GET /api/sweeper", () => {
   const call = (authorization?: string) =>
-    route(new Request("http://test/api/sweeper", { method, headers: authorization ? { authorization } : {} }));
+    GET(new Request("http://test/api/sweeper", { method: "GET", headers: authorization ? { authorization } : {} }));
 
   beforeEach(() => {
     process.env.CRON_SECRET = "cron-secret";

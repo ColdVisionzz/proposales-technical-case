@@ -11,8 +11,9 @@ import { HealthBanner } from "./HealthBanner";
 import { CopyAddress } from "./CopyAddress";
 import { DemoIntro } from "./DemoIntro";
 import { Mark } from "./icons";
-import { Pipeline } from "./Pipeline";
+import { IdlePipeline, Pipeline } from "./Pipeline";
 import { ProposalPreview } from "./ProposalPreview";
+import { SweeperButton } from "./SweeperButton";
 
 const INBOUND = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -64,6 +65,7 @@ export function Dashboard() {
             </h1>
             <div className="flex min-w-0 items-center gap-4">
               {INBOUND && <CopyAddress address={INBOUND} className="hidden sm:inline-flex" />}
+              <SweeperButton />
               <p className="label flex items-center gap-2 text-sm text-muted" role="status">
                 <span className={`h-1.5 w-1.5 rounded-full ${list.stale ? "bg-warn" : "animate-pulse bg-accent"}`} />
                 {list.stale ? "Reconnecting" : "Live"}
@@ -74,45 +76,23 @@ export function Dashboard() {
       </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-10 md:px-8 md:pt-14">
-        {heroRow ? <Pipeline key={heroRow.id} enquiry={heroRow} detail={heroDetail} now={now} /> : INBOUND && list.data ? <DemoIntro address={INBOUND} /> : <EmptyStage loading={!list.data} />}
+        {heroRow ? <Pipeline key={heroRow.id} enquiry={heroRow} detail={heroDetail} now={now} /> : <IdlePipeline loading={!list.data} />}
 
-        {focus && (
-          <div
-            className="mt-8 grid gap-8 lg:grid-cols-[5fr_7fr] lg:gap-6"
-            onMouseLeave={() => setHoverId(null)}
-            onBlur={(e) => {
-              if (!e.currentTarget.contains(e.relatedTarget)) setHoverId(null);
-            }}
-          >
-            {previewRow ? <ProposalPreview key={previewRow.id} enquiry={previewRow} detail={previewDetail} names={names} now={now} onOpen={() => open(previewRow.id)} /> : <DemoIntro address={INBOUND} />}
-            <section aria-labelledby="recent">
-              <h2 id="recent" className="mb-3 text-sm font-semibold lg:sr-only">
-                Recent enquiries
-              </h2>
-              <EnquiryList rows={rows} now={now} focusId={focus.id} onSelect={open} onHover={setHoverId} inbound={INBOUND || "the inbound address"} />
-            </section>
-          </div>
-        )}
+        <div
+          className="mt-8 grid gap-8 lg:grid-cols-[5fr_7fr] lg:gap-6"
+          onMouseLeave={() => setHoverId(null)}
+          onBlur={(e) => {
+            if (!e.currentTarget.contains(e.relatedTarget)) setHoverId(null);
+          }}
+        >
+          {previewRow ? <ProposalPreview key={previewRow.id} enquiry={previewRow} detail={previewDetail} names={names} now={now} onOpen={() => open(previewRow.id)} /> : INBOUND ? <DemoIntro address={INBOUND} /> : null}
+          <EnquiryList rows={rows} now={now} focusId={focus?.id ?? null} onSelect={open} onHover={setHoverId} />
+        </div>
 
         <p className="mt-14 max-w-xl text-sm text-muted">One shared inbox and no accounts. A real deployment would add sign-in and a separate inbox for each hotel.</p>
       </main>
       <EnquiryDrawer open={selectedId !== null} detail={detail?.id === selectedId ? detail : null} names={names} now={now} onClose={close} />
     </>
-  );
-}
-
-function EmptyStage({ loading }: { loading: boolean }) {
-  return (
-    <section className="panel px-6 py-16 text-center" aria-busy={loading} aria-label="Latest enquiry">
-      <Mark className="mx-auto h-8 w-8" />
-      <h2 className="display mt-5 text-3xl font-semibold">{loading ? "Connecting" : "Waiting for the first enquiry"}</h2>
-      {!loading && (
-        <>
-          <p className="mx-auto mt-2 max-w-md text-muted">Send an enquiry email to this address. It appears here the moment it arrives.</p>
-          {INBOUND && <CopyAddress address={INBOUND} className="mt-6 inline-flex" />}
-        </>
-      )}
-    </section>
   );
 }
 
