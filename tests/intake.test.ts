@@ -17,7 +17,6 @@ vi.mock("next/server", async (importOriginal) => ({
 const runAfter = () => Promise.all(afterCallbacks.splice(0).map((fn) => fn()));
 
 import { POST as inbound } from "../app/api/inbound/route";
-import { POST as paste } from "../app/api/enquiries/route";
 
 const SECRET_BYTES = Buffer.from("test-secret-for-intake-tests-123");
 const SECRET = `whsec_${SECRET_BYTES.toString("base64")}`;
@@ -89,8 +88,6 @@ const received = (messageId = "<abc@mail.example>") => ({
 });
 
 const count = async () => (await sql`SELECT count(*)::int AS n FROM enquiries`)[0].n as number;
-const pasteReq = (body: unknown) =>
-  new Request("http://test/api/enquiries", { method: "POST", body: JSON.stringify(body) });
 
 describe("email intake", () => {
   test("a signed email makes one row with the webhook fields and no body yet", async () => {
@@ -162,13 +159,6 @@ describe("worker nudge", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  test("a new paste nudges once, a repeat does not", async () => {
-    await paste(pasteReq({ body: "Nudge me" }));
-    await paste(pasteReq({ body: "Nudge me" }));
-    await runAfter();
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-  });
-
   test("a failed insert sends no nudge", async () => {
     current = postgres("postgres://nobody:nothing@127.0.0.1:1/none", { max: 1, connect_timeout: 2 });
     await inbound(webhook(received()));
@@ -184,39 +174,14 @@ describe("worker nudge", () => {
     expect(await count()).toBe(1); // the row is stored, the sweeper will find it
 
     fetchMock.mockResolvedValueOnce(new Response("no", { status: 401 }));
-    await paste(pasteReq({ body: "Refused" }));
+    await inbound(webhook(received("<refused@mail.example>"), { id: "msg_2" }));
     await expect(runAfter()).resolves.toBeDefined();
   });
 });
 
-describe("paste intake", () => {
-  test("a paste makes one row with the body", async () => {
-    const res = await paste(pasteReq({ subject: "Wedding", body: "Hello, 40 guests" }));
-    expect(res.status).toBe(201);
-    const [row] = await sql`SELECT source, raw_body, raw_subject FROM enquiries`;
-    expect(row).toEqual({ source: "paste", raw_body: "Hello, 40 guests", raw_subject: "Wedding" });
-  });
-
-  test("the same paste twice makes one row and points at the original", async () => {
-    const first = await (await paste(pasteReq({ body: "Same text" }))).json();
-    const res = await paste(pasteReq({ body: "Same text" }));
-    expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ id: first.id, created: false });
-    expect(await count()).toBe(1);
-  });
-
-  test("an empty or invalid body returns 400", async () => {
-    expect((await paste(pasteReq({ body: "   " }))).status).toBe(400);
-    expect((await paste(pasteReq({}))).status).toBe(400);
-    expect((await paste(new Request("http://test/api/enquiries", { method: "POST", body: "not json" }))).status).toBe(400);
-    expect(await count()).toBe(0);
-  });
-
-  test("paste and email rows go through the same insert function", async () => {
-    // Both routes import insertEnquiry; a row from each lands in the same table with the same dedupe key column.
-    await inbound(webhook(received()));
-    await paste(pasteReq({ body: "x" }));
-    const rows = await sql`SELECT source FROM enquiries ORDER BY source`;
-    expect(rows.map((r) => r.source)).toEqual(["email", "paste"]);
+describe("no public paste route", () => {
+  test("/api/enquiries accepts no writes, so the only way in is the signed webhook", async () => {
+    const route = await import("../app/api/enquiries/route");
+    expect(Object.keys(route).filter((k) => ["POST", "PUT", "PATCH", "DELETE"].includes(k))).toEqual([]);
   });
 });

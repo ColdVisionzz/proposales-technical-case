@@ -19,6 +19,7 @@
     "ai": "^6.0.309",
     "next": "16.4.2",
     "postgres": "^3.4.9",
+    "qrcode-generator": "^2.0.4",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "resend": "^6.34.1",

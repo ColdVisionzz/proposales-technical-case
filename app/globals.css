@@ -53,6 +53,9 @@ body {
 /* Shared surface: hairline border, one radius (12px). */
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; box-shadow: var(--shadow); }
 
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.fade-in { animation: fade-in 160ms var(--ease-out); }
+
 /* Pressed feedback fires on pointer-down, not on release. */
 .press { transition: transform 120ms var(--ease-out), background-color 160ms ease, opacity 160ms ease, border-color 160ms ease; }
 .press:active:not(:disabled) { transform: scale(0.98); }
@@ -124,7 +127,7 @@ body {
 
 @media (prefers-reduced-motion: reduce) {
   .rail-fill, .node, .press, .drawer, .drawer::backdrop { transition-duration: 1ms !important; transition-delay: 0s !important; }
-  .rail .node::after, .line-in, .animate-pulse { animation: none !important; }
+  .rail .node::after, .line-in, .animate-pulse, .fade-in { animation: none !important; }
   .drawer:not([open]) { transform: none; }
 }
 @media (prefers-reduced-transparency: reduce) {

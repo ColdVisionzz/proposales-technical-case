@@ -1,14 +1,16 @@
 "use client";
 
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useMemo, useState } from "react";
 import type { EnquiryDetail, EnquirySummary } from "@/lib/db/enquiry-views";
 import { useNow, usePoll } from "@/lib/dashboard/hooks";
 import type { Health } from "@/lib/pipeline/health";
 import { EnquiryDrawer } from "./EnquiryDrawer";
 import { EnquiryList } from "./EnquiryList";
 import { HealthBanner } from "./HealthBanner";
-import { Check, Copy, Mark } from "./icons";
+import { CopyAddress } from "./CopyAddress";
+import { DemoIntro } from "./DemoIntro";
+import { Mark } from "./icons";
 import { Pipeline } from "./Pipeline";
 import { ProposalPreview } from "./ProposalPreview";
 
@@ -33,6 +35,17 @@ export function Dashboard() {
   const detailId = selectedId ?? focus?.id ?? null;
   const detail = usePoll<EnquiryDetail>(detailId ? `/api/enquiries/${detailId}` : null, 2000).data;
   const focusDetail = focus && detail?.id === focus.id ? detail : null;
+
+  // Hovering (or focusing) a row shows that enquiry in the rail and the preview. It stays until the pointer or focus leaves
+  // the whole two-column area, so moving from a row across to the preview does not drop back to the intro.
+  const [hoverId, setHoverId] = useState<string | null>(null);
+  const hoverRow = hoverId ? (rows.find((r) => r.id === hoverId) ?? null) : null;
+  // Without an inbound address there is nothing to advertise, so the preview of the newest enquiry stays.
+  const previewRow = hoverRow ?? (INBOUND ? (rows.find((r) => r.id === selectedId) ?? null) : focus);
+  const hoverDetail = usePoll<EnquiryDetail>(hoverId && hoverId !== detailId ? `/api/enquiries/${hoverId}` : null, 2000).data;
+  const previewDetail = previewRow ? (hoverDetail?.id === previewRow.id ? hoverDetail : detail?.id === previewRow.id ? detail : null) : null;
+  const heroRow = hoverRow ?? focus;
+  const heroDetail = hoverRow ? previewDetail : focusDetail;
 
   const open = (id: string) => router.push(`/?id=${id}`, { scroll: false });
   const close = () => {
@@ -61,16 +74,22 @@ export function Dashboard() {
       </div>
 
       <main className="mx-auto w-full max-w-6xl flex-1 px-4 pb-20 pt-10 md:px-8 md:pt-14">
-        {focus ? <Pipeline key={focus.id} enquiry={focus} detail={focusDetail} now={now} /> : <EmptyStage loading={!list.data} />}
+        {heroRow ? <Pipeline key={heroRow.id} enquiry={heroRow} detail={heroDetail} now={now} /> : INBOUND && list.data ? <DemoIntro address={INBOUND} /> : <EmptyStage loading={!list.data} />}
 
         {focus && (
-          <div className="mt-8 grid gap-8 lg:grid-cols-[5fr_7fr] lg:gap-6">
-            <ProposalPreview key={focus.id} enquiry={focus} detail={focusDetail} names={names} now={now} onOpen={() => open(focus.id)} />
+          <div
+            className="mt-8 grid gap-8 lg:grid-cols-[5fr_7fr] lg:gap-6"
+            onMouseLeave={() => setHoverId(null)}
+            onBlur={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget)) setHoverId(null);
+            }}
+          >
+            {previewRow ? <ProposalPreview key={previewRow.id} enquiry={previewRow} detail={previewDetail} names={names} now={now} onOpen={() => open(previewRow.id)} /> : <DemoIntro address={INBOUND} />}
             <section aria-labelledby="recent">
               <h2 id="recent" className="mb-3 text-sm font-semibold lg:sr-only">
                 Recent enquiries
               </h2>
-              <EnquiryList rows={rows} now={now} focusId={focus.id} onSelect={open} inbound={INBOUND || "the inbound address"} />
+              <EnquiryList rows={rows} now={now} focusId={focus.id} onSelect={open} onHover={setHoverId} inbound={INBOUND || "the inbound address"} />
             </section>
           </div>
         )}
@@ -97,30 +116,3 @@ function EmptyStage({ loading }: { loading: boolean }) {
   );
 }
 
-// The inbound address as one tap: copies it and says so. The label is announced politely, the timer clears on unmount.
-function CopyAddress({ address, className = "" }: { address: string; className?: string }) {
-  const [copied, setCopied] = useState(false);
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  useEffect(() => () => clearTimeout(timer.current), []);
-
-  async function copy() {
-    try {
-      await navigator.clipboard.writeText(address);
-      setCopied(true);
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => setCopied(false), 1600);
-    } catch {
-      // Clipboard blocked: the address stays selectable on screen, nothing else to do.
-    }
-  }
-
-  return (
-    <button type="button" onClick={copy} aria-label={`Copy the inbound address ${address}`} className={`press num min-w-0 items-center gap-2 rounded-lg border border-line bg-surface px-3 py-1.5 text-sm hover:border-line-strong ${className}`}>
-      <span className="truncate">{address}</span>
-      {copied ? <Check className="h-3.5 w-3.5 shrink-0 text-accent" /> : <Copy className="h-3.5 w-3.5 shrink-0 text-muted" />}
-      <span className="sr-only" role="status">
-        {copied ? "Copied" : ""}
-      </span>
-    </button>
-  );
-}

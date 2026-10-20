@@ -6,7 +6,7 @@ import { ArrowUpRight } from "./icons";
 import { StatusChip } from "./StatusChip";
 
 // Every enquiry, newest first. Clicking a row opens its drawer. The draft link is its own link, so it is one click from the list.
-export function EnquiryList({ rows, now, focusId, onSelect, inbound }: { rows: EnquirySummary[]; now: number; focusId: string | null; onSelect: (id: string) => void; inbound: string }) {
+export function EnquiryList({ rows, now, focusId, onSelect, onHover, inbound }: { rows: EnquirySummary[]; now: number; focusId: string | null; onSelect: (id: string) => void; onHover?: (id: string) => void; inbound: string }) {
   if (!rows.length) {
     return (
       <div className="panel px-6 py-10 text-center">
@@ -25,6 +25,8 @@ export function EnquiryList({ rows, now, focusId, onSelect, inbound }: { rows: E
           <button
             type="button"
             onClick={() => onSelect(r.id)}
+            onMouseEnter={() => onHover?.(r.id)}
+            onFocus={() => onHover?.(r.id)}
             aria-current={r.id === focusId ? "true" : undefined}
             className={`press grid min-w-0 flex-1 grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 px-5 py-3 text-left hover:bg-background ${r.id === focusId ? "bg-background" : ""}`}
           >
