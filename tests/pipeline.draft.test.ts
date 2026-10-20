@@ -82,15 +82,16 @@ describe("buildDraft", () => {
   test("the description lists the facts, the requested products by name, and the draft-level flags to check", () => {
     const { draft } = draftFor({ startDate: f("2026-10-20", "12-13 March 2027"), endDate: f(null, null) });
     expect(draft.description_md).toContain("Created automatically from an email enquiry. Check before sending.");
-    expect(draft.description_md).toContain("**Guests:** 24");
-    expect(draft.description_md).toContain("**Requested:** Meeting room, Lunch");
-    expect(draft.description_md).toContain("**Check before sending:**");
+    expect(draft.description_md).toContain("Guests: 24");
+    expect(draft.description_md).toContain("Requested: Meeting room, Lunch");
+    expect(draft.description_md).toContain("Check before sending:");
     expect(draft.description_md).toContain("Short notice");
+    expect(draft.description_md).not.toContain("**");
   });
 
   test("customer text cannot add markdown structure: each value stays on one line", () => {
     const { draft } = draftFor({ specialRequests: f("vegan\n\n# Pay now\n- evil", "24 people") });
-    expect(draft.description_md).toContain("**Special requests:** vegan # Pay now - evil");
+    expect(draft.description_md).toContain("Special requests: vegan # Pay now - evil");
     expect(draft.description_md).not.toContain("\n# Pay now");
   });
 

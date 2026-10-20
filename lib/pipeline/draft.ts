@@ -72,17 +72,17 @@ export function buildDraft({ enquiryKey, companyId, validated: v, flags, catalog
   const lines = [
     "Created automatically from an email enquiry. Check before sending.",
     "",
-    `- **Dates:** ${start ? `${start}${end && end !== start ? ` to ${end}` : ""}` : "not stated"}`,
-    `- **Guests:** ${guests}`,
-    ...(v.rooms.value ? [`- **Rooms:** ${v.rooms.value}${v.nights.value !== null ? ` (${plural(v.nights.value, "night")})` : ""}`] : []),
-    ...(v.products.length ? [`- **Requested:** ${v.products.map((p) => oneLine(titleOf(p.variationId))).join(", ")}`] : []),
-    ...(v.eventType.value ? [`- **Event:** ${oneLine(v.eventType.value)}`] : []),
-    ...(v.budget.value ? [`- **Budget:** ${oneLine(v.budget.value)}`] : []),
-    ...(v.specialRequests.value ? [`- **Special requests:** ${oneLine(v.specialRequests.value)}`] : []),
-    ...(v.contactName.value || from.email ? [`- **Contact:** ${oneLine([v.contactName.value ?? from.name, from.email].filter(Boolean).join(", "))}`] : []),
+    `- Dates: ${start ? `${start}${end && end !== start ? ` to ${end}` : ""}` : "not stated"}`,
+    `- Guests: ${guests}`,
+    ...(v.rooms.value ? [`- Rooms: ${v.rooms.value}${v.nights.value !== null ? ` (${plural(v.nights.value, "night")})` : ""}`] : []),
+    ...(v.products.length ? [`- Requested: ${v.products.map((p) => oneLine(titleOf(p.variationId))).join(", ")}`] : []),
+    ...(v.eventType.value ? [`- Event: ${oneLine(v.eventType.value)}`] : []),
+    ...(v.budget.value ? [`- Budget: ${oneLine(v.budget.value)}`] : []),
+    ...(v.specialRequests.value ? [`- Special requests: ${oneLine(v.specialRequests.value)}`] : []),
+    ...(v.contactName.value || from.email ? [`- Contact: ${oneLine([v.contactName.value ?? from.name, from.email].filter(Boolean).join(", "))}`] : []),
   ];
   const check = [...flags.filter(isDraftLevel), ...notes];
-  if (check.length) lines.push("", "**Check before sending:**", ...check.map((f) => `- ${oneLine(f.message)}`));
+  if (check.length) lines.push("", "Check before sending:", ...check.map((f) => `- ${oneLine(f.message)}`));
 
   // The model's name is checked against the email (its quote must be there); the header's display name is not
   // checked and is often "Sales" or a company. So the header is only the fallback.
