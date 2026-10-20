@@ -1,6 +1,9 @@
 import type { CatalogEntry, EmailInput } from "./extract";
 import { policy as defaultPolicy, type Policy } from "./policy";
+import { ceilingFor, dayNumber, stayOf } from "./quantity";
 import { HAND_EVIDENCE, type Extraction } from "./schema";
+
+export { dayNumber };
 
 // "unsupported": the model's value failed a check and was dropped (the claim is kept for the salesperson to see).
 // "check": the value is kept, but a human should look at it.
@@ -22,7 +25,7 @@ export type Validated = {
   language: Checked<string>;
   budget: Checked<string>;
   specialRequests: Checked<string>;
-  products: Array<{ variationId: number; confidence: number; evidence: string }>;
+  products: Array<{ variationId: number; confidence: number; evidence: string; quantity: number | null }>;
   flags: Flag[];
 };
 
@@ -44,16 +47,6 @@ const evidenceFound = (evidence: string | null, emailNorm: string) => {
   const quote = evidence ? normalise(evidence) : "";
   return quote !== "" && emailNorm.includes(quote);
 };
-
-// Days since 1970-01-01 for a real calendar day written YYYY-MM-DD, otherwise null (so 2027-02-30 is null).
-export function dayNumber(text: string): number | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
-  if (!m) return null;
-  const [year, month, day] = [Number(m[1]), Number(m[2]), Number(m[3])];
-  const date = new Date(Date.UTC(year, month - 1, day));
-  const real = date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day;
-  return real ? date.getTime() / 86_400_000 : null;
-}
 
 const clamp = (n: number) => (Number.isFinite(n) ? Math.min(1, Math.max(0, n)) : 0);
 const positiveInt = (n: number) => Number.isInteger(n) && n >= 1;
@@ -143,11 +136,34 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
   if (language.value) language.value = language.value.toLowerCase();
   else flags.push({ field: "language", level: "check", message: "Language unknown: the draft will default to English" });
 
+  const rooms = field("rooms", extraction.rooms, { reject: wholeNumber("Rooms") });
+  // A day event has 0 nights, so unlike rooms this may be 0.
+  const nights = field("nights", extraction.nights, { reject: (n) => (Number.isInteger(n) && n >= 0 ? null : "Nights must be a whole number, 0 or more") });
+
   // Products: only catalog ids, once each, with a quote in the email and enough confidence.
   const catalogIds = new Set(catalog.map((c) => c.variation_id));
   const productName = (id: number) => {
     const item = catalog.find((c) => c.variation_id === id);
     return item ? `"${item.title.en ?? Object.values(item.title)[0] ?? id}"` : String(id);
+  };
+  const stay = stayOf(startDate.value, endDate.value, nights.value);
+
+  // A quantity the email states replaces the default rule only if its words are in the email, the number is a whole
+  // number from 1 up to what the booking can hold, and the guest count it depends on is trusted. Otherwise null (the
+  // default applies) with a flag; a quantity that cannot be checked never reaches a draft.
+  const statedQuantity = (product: Extraction["products"][number], title: string, byHand: boolean): number | null => {
+    const { quantity, quantityEvidence } = product;
+    if (quantity === null || byHand) return null;
+    const flag = (message: string) => flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: stated quantity ${quantity} ignored, ${message}`, claimed: quantity, evidence: quantityEvidence });
+    if (guests.value === null) return null; // no draft without a guest count; decide() reports it
+    if (!positiveInt(quantity)) return flag("it is not a whole number of at least 1"), null;
+    if (!evidenceFound(quantityEvidence, emailNorm)) return flag("its quoted words are not in the email"), null;
+    const ceiling = ceilingFor(title, { guests: guests.value, rooms: rooms.value, stay });
+    if (quantity > ceiling) return flag(`more than the booking can hold (${ceiling})`), null;
+    if (!numberInQuote(quantity, quantityEvidence as string)) {
+      flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: quantity ${quantity} was worked out by the model, check it`, claimed: quantity, evidence: quantityEvidence });
+    }
+    return quantity;
   };
   const products: Validated["products"] = [];
   for (const product of extraction.products) {
@@ -160,7 +176,9 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     else if (confidence < policy.examine) drop(`${productName(product.variationId)} left out: the model was not confident enough (${confidence})`);
     else {
       if (confidence < policy.certain) flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: the model was only fairly sure (${confidence})`, claimed: product.variationId, evidence: product.evidence });
-      products.push({ variationId: product.variationId, confidence, evidence: product.evidence });
+      const title = catalog.find((c) => c.variation_id === product.variationId)?.title;
+      const quantity = statedQuantity(product, title ? (title.en ?? Object.values(title)[0] ?? "") : "", byHand);
+      products.push({ variationId: product.variationId, confidence, evidence: product.evidence, quantity });
     }
   }
   if (products.length === 0) flags.push({ field: "products", level: "check", message: "No catalog product matched this enquiry: add the blocks by hand" });
@@ -173,9 +191,8 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     startDate,
     endDate,
     guests,
-    rooms: field("rooms", extraction.rooms, { reject: wholeNumber("Rooms") }),
-    // A day event has 0 nights, so unlike rooms this may be 0.
-    nights: field("nights", extraction.nights, { reject: (n) => (Number.isInteger(n) && n >= 0 ? null : "Nights must be a whole number, 0 or more") }),
+    rooms,
+    nights,
     language,
     budget: field("budget", extraction.budget),
     specialRequests: field("specialRequests", extraction.specialRequests),

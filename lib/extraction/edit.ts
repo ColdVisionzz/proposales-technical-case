@@ -15,7 +15,7 @@ export function parseChanges(input: unknown): { ok: true; changes: Changes } | {
     if (key === "products") {
       const ids = z.array(z.number().int()).safeParse(raw);
       if (!ids.success) return { ok: false, error: "products must be a list of variation ids" };
-      out.products = [...new Set(ids.data)].map((variationId) => ({ variationId, confidence: 1, evidence: HAND_EVIDENCE }));
+      out.products = [...new Set(ids.data)].map((variationId) => ({ variationId, confidence: 1, evidence: HAND_EVIDENCE, quantity: null, quantityEvidence: null }));
     } else if (FIELD_NAMES.includes(key)) {
       const value = (extractionSchema.shape as unknown as Record<string, z.ZodObject<{ value: z.ZodType }>>)[key].shape.value.safeParse(raw);
       if (!value.success) return { ok: false, error: `${key} has the wrong type` };

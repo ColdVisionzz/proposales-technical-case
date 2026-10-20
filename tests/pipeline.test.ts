@@ -93,8 +93,8 @@ describe("outcomes", () => {
       data: { enquiry_key: id },
       recipient: { email: "anna@northwind.example.com" },
       blocks: [
-        { content_id: 3001, quantity: 1 },
-        { content_id: 3002, quantity: 24 },
+        { content_id: 3001, quantity: 2 }, // 12-13 March: 2 event days
+        { content_id: 3002, quantity: 48 }, // 24 guests x 2 days
       ],
     });
     expect(draft.input.description_md).toContain("2027-03-12 to 2027-03-13");

@@ -29,6 +29,14 @@ export const extractionSchema = z.object({
         variationId: z.number().int().describe("A variation_id from the catalog. Never an id that is not in the catalog"),
         confidence: z.number().describe("0 to 1"),
         evidence: z.string().describe("Exact words from the email that ask for this product"),
+        // .catch(null): rows stored before these fields existed still parse. The field stays required in the model's schema.
+        quantity: z
+          .number()
+          .int()
+          .nullable()
+          .catch(null)
+          .describe("Total units for the whole event, only when the email states a count or a share for this product (5 of 10 guests want dinner: 5). Null when it does not"),
+        quantityEvidence: z.string().nullable().catch(null).describe("Exact words from the email that state that count or share, or null"),
       }),
     )
     .describe("Catalog products the email asks for. Empty when nothing fits"),

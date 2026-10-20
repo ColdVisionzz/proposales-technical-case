@@ -1,4 +1,4 @@
-import { quantityFor } from "../pipeline/draft";
+import { ceilingFor, resolveQuantity, stayOf } from "../extraction/quantity";
 import { extractionSchema, type Extraction } from "../extraction/schema";
 
 // Pure functions behind the dashboard: what each status looks like in the pipe, plain-language errors, the booking card.
@@ -124,10 +124,14 @@ export function booking(extracted: unknown, catalog: Map<number, string> | null)
   const x: Extraction = parsed.data;
   const guests = x.guests.value;
   const lines: BookingLine[] = [];
+  const stay = stayOf(x.startDate.value, x.endDate.value, x.nights.value);
   for (const p of x.products) {
     const title = catalog ? catalog.get(p.variationId) : `product #${p.variationId}`;
     if (title === undefined) continue;
-    const { quantity } = catalog ? quantityFor(title, guests ?? 1, x.rooms.value) : { quantity: 1 };
+    // The card has no email text to check a stated quantity against, so it shows one only when it fits the booking.
+    const ctx = { guests: guests ?? 1, rooms: x.rooms.value, stay };
+    const stated = p.quantity !== null && Number.isInteger(p.quantity) && p.quantity >= 1 && p.quantity <= ceilingFor(title, ctx) ? p.quantity : null;
+    const { quantity } = catalog ? resolveQuantity(title, ctx, stated) : { quantity: 1 };
     lines.push({ label: title, quantity });
   }
   const dates = x.startDate.value ? niceDates(x.startDate.value, x.endDate.value) : null;

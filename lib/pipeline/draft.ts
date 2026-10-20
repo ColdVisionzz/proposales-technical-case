@@ -1,24 +1,8 @@
 import { isDraftLevel } from "../extraction/decide";
 import { DEFAULT_LANGUAGE } from "../extraction/policy";
+import { resolveQuantity, ruleFor, stayOf } from "../extraction/quantity";
 import { dayNumber, type Flag, type Validated } from "../extraction/validate";
 import { ENQUIRY_KEY, type CatalogItem, type CreateDraftInput } from "../proposales/gateway";
-
-// How many of a product to put in the draft. The API's catalog says nothing about units, so we keep the rule here.
-//   one        a single item (a meeting room, an AV package)
-//   per_guest  one per guest (lunch, dinner)
-//   per_room   one per hotel room
-// Products not listed here default to "one" and the salesperson adjusts in Proposales.
-// Keyed by the English product title, not the id: ids differ from account to account, the seeded titles do not.
-// ponytail: a renamed product silently falls back to "one". Key by a custom field if hotels rename their products.
-export type QuantityRule = "one" | "per_guest" | "per_room";
-export const QUANTITY_RULES: Record<string, QuantityRule> = { lunch: "per_guest", "hotel room": "per_room", dinner: "per_guest" };
-
-export function quantityFor(title: string, guests: number, rooms: number | null): { quantity: number; missingRooms?: true } {
-  const rule = QUANTITY_RULES[title.trim().toLowerCase()] ?? "one";
-  if (rule === "per_guest") return { quantity: guests };
-  if (rule === "per_room") return rooms ? { quantity: rooms } : { quantity: 1, missingRooms: true };
-  return { quantity: 1 };
-}
 
 // "Anna Lindqvist <anna@x.com>" -> { name: "Anna Lindqvist", email: "anna@x.com" }. A bare address works too.
 export function parseSender(sender: string | null): { name?: string; email?: string } {
@@ -61,20 +45,27 @@ export function buildDraft({ enquiryKey, companyId, validated: v, flags, catalog
 
   const guests = v.guests.value as number; // decide() only lets a draft through with guests and a start date
   const notes: Flag[] = [];
+  const stay = stayOf(start, end, v.nights.value);
   const blocks = v.products.map((p) => {
-    const { quantity, missingRooms } = quantityFor(titleOf(p.variationId), guests, v.rooms.value);
-    if (missingRooms) {
-      notes.push({ field: "products", level: "check", message: `"${titleOf(p.variationId)}" is priced per room but the email gives no room count: quantity set to 1, check it` });
-    }
+    const title = titleOf(p.variationId);
+    const { quantity, notes: quantityNotes } = resolveQuantity(title, { guests, rooms: v.rooms.value, stay }, p.quantity);
+    for (const message of quantityNotes) notes.push({ field: "products", level: "check", message });
     return { type: "product-block" as const, content_id: p.variationId, quantity };
   });
+  // Rooms in the email but no room product to carry them, or more rooms than people: both are likely misreads.
+  if (v.rooms.value && !v.products.some((p) => ruleFor(titleOf(p.variationId)) === "per_room_night")) {
+    notes.push({ field: "products", level: "check", message: `The email asks for ${plural(v.rooms.value, "room")} but no hotel room product is in the draft: add it if rooms are wanted` });
+  }
+  if (v.rooms.value && v.rooms.value > guests) {
+    notes.push({ field: "rooms", level: "check", message: `${plural(v.rooms.value, "room")} for ${plural(guests, "guest")}: more rooms than guests, check the room count` });
+  }
 
   const lines = [
     "Created automatically from an email enquiry. Check before sending.",
     "",
     `- Dates: ${start ? `${start}${end && end !== start ? ` to ${end}` : ""}` : "not stated"}`,
     `- Guests: ${guests}`,
-    ...(v.rooms.value ? [`- Rooms: ${v.rooms.value}${v.nights.value !== null ? ` (${plural(v.nights.value, "night")})` : ""}`] : []),
+    ...(v.rooms.value ? [`- Rooms: ${v.rooms.value}${stay.nights !== null ? ` (${plural(stay.nights, "night")})` : ""}`] : []),
     ...(v.products.length ? [`- Requested: ${v.products.map((p) => oneLine(titleOf(p.variationId))).join(", ")}`] : []),
     ...(v.eventType.value ? [`- Event: ${oneLine(v.eventType.value)}`] : []),
     ...(v.budget.value ? [`- Budget: ${oneLine(v.budget.value)}`] : []),

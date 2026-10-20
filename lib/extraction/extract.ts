@@ -1,7 +1,7 @@
 import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { extractionSchema, type Extraction } from "./schema";
 
-export const PROMPT_VERSION = "v2";
+export const PROMPT_VERSION = "v3";
 // Gateway model id. Unverified until the first eval run; override with EXTRACTION_MODEL.
 export const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const TIMEOUT_MS = 25_000;
@@ -36,6 +36,7 @@ Rules:
 - language: always fill it in. value is the ISO 639-1 code of the language the email is written in. evidence is a short phrase from the email in that language.
 - Dates are ISO YYYY-MM-DD. Today is ${today}. Resolve relative dates such as "next Friday" from today. The evidence is the original phrase.
 - products: choose only from the catalog below, by variation_id, and only what the email asks for. If nothing fits, return an empty list. Never invent an id.
+- quantity: set it only when the email states how many of that product are wanted, or what share of the guests or days (for example "dinner for 5 of us", "lunch on Monday and Wednesday only"). It is the TOTAL units for the whole event, so lunch for 10 guests on 2 days is 20. quantityEvidence is the exact words that state it. When the email gives no such count, set both to null: the system works out the usual amount itself.
 
 Catalog:
 ${products || "(empty)"}`;

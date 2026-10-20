@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { policy } from "@/lib/extraction/policy";
-import type { Extraction } from "@/lib/extraction/schema";
+import { HAND_EVIDENCE, type Extraction } from "@/lib/extraction/schema";
 import { normalise, validate } from "@/lib/extraction/validate";
 import { catalog, clean, email, f, TODAY } from "./extraction.fixtures";
 
@@ -164,33 +164,81 @@ describe("confidence bands", () => {
   });
 });
 
+describe("stated product quantities", () => {
+  // The email has "24 people" and 12-13 March 2027: 2 event days, so the dinner ceiling is 24 x 2 = 48.
+  const dinner = (quantity: number | null, quantityEvidence: string | null) => ({
+    products: [{ variationId: 3004, confidence: 1, evidence: "lunch", quantity, quantityEvidence }],
+  });
+  const quoted = "24 people";
+  const flagTexts = (v: ReturnType<typeof run>) => flagsFor(v, "products").map((x) => x.message);
+
+  test("a count whose digits are in a quote from the email is accepted", () => {
+    const v = run(dinner(24, quoted));
+    expect(v.products[0].quantity).toBe(24);
+    expect(flagTexts(v)).toEqual([]);
+  });
+
+  test("a quote that is not in the email drops the quantity (the default applies) and says so", () => {
+    const v = run(dinner(5, "only 5 of us want dinner"));
+    expect(v.products[0].quantity).toBeNull();
+    expect(flagTexts(v)).toEqual([expect.stringContaining("its quoted words are not in the email")]);
+  });
+
+  test("more than the booking can hold is dropped", () => {
+    const v = run(dinner(49, quoted));
+    expect(v.products[0].quantity).toBeNull();
+    expect(flagTexts(v)).toEqual([expect.stringContaining("more than the booking can hold (48)")]);
+  });
+
+  test.each([0, -3, 1.5])("%s is not a usable quantity", (n) => {
+    const v = run(dinner(n, quoted));
+    expect(v.products[0].quantity).toBeNull();
+    expect(flagTexts(v)).toEqual([expect.stringContaining("whole number of at least 1")]);
+  });
+
+  test("a number worked out by the model (not written in the quote) is kept but flagged", () => {
+    const v = run(dinner(12, quoted));
+    expect(v.products[0].quantity).toBe(12);
+    expect(flagTexts(v)).toEqual([expect.stringContaining("worked out by the model")]);
+  });
+
+  test("a hand-entered product never carries a quantity", () => {
+    const hand = { products: [{ variationId: 3004, confidence: 1, evidence: HAND_EVIDENCE, quantity: 10, quantityEvidence: quoted }] };
+    expect(validate(clean(hand), email, catalog, TODAY, policy, true).products[0].quantity).toBeNull();
+  });
+
+  test("a quantity with no guest count is not used: there is no draft without one", () => {
+    expect(run({ ...dinner(5, quoted), guests: f(null, null) }).products[0].quantity).toBeNull();
+  });
+});
+
 describe("products", () => {
   const productFlags = (v: ReturnType<typeof run>) => flagsFor(v, "products");
 
   test("an id that is not in the catalog is dropped and flagged, never passed on", () => {
-    const v = run({ products: [{ variationId: 9999, confidence: 1, evidence: "a meeting room" }, { variationId: 3001, confidence: 1, evidence: "a meeting room" }] });
+    const v = run({ products: [{ variationId: 9999, confidence: 1, evidence: "a meeting room", quantity: null, quantityEvidence: null }, { variationId: 3001, confidence: 1, evidence: "a meeting room", quantity: null, quantityEvidence: null }] });
     expect(v.products.map((p) => p.variationId)).toEqual([3001]);
     expect(productFlags(v)).toMatchObject([{ level: "unsupported", claimed: 9999 }]);
   });
 
   test("a product whose quote is not in the email is dropped", () => {
-    const v = run({ products: [{ variationId: 3004, confidence: 1, evidence: "dinner for everyone" }, { variationId: 3001, confidence: 1, evidence: "a meeting room" }] });
+    const v = run({ products: [{ variationId: 3004, confidence: 1, evidence: "dinner for everyone", quantity: null, quantityEvidence: null }, { variationId: 3001, confidence: 1, evidence: "a meeting room", quantity: null, quantityEvidence: null }] });
     expect(v.products.map((p) => p.variationId)).toEqual([3001]);
   });
 
   test("a product the model was unsure about is dropped below 0.6 and flagged between 0.6 and 0.8", () => {
-    const v = run({ products: [{ variationId: 3001, confidence: 0.59, evidence: "a meeting room" }, { variationId: 3002, confidence: 0.7, evidence: "lunch" }] });
+    const v = run({ products: [{ variationId: 3001, confidence: 0.59, evidence: "a meeting room", quantity: null, quantityEvidence: null }, { variationId: 3002, confidence: 0.7, evidence: "lunch", quantity: null, quantityEvidence: null }] });
     expect(v.products.map((p) => p.variationId)).toEqual([3002]);
     expect(productFlags(v).map((x) => x.level).sort()).toEqual(["check", "unsupported"]);
   });
 
   test("product flags name the product so a salesperson can read them", () => {
-    const v = run({ products: [{ variationId: 3002, confidence: 0.7, evidence: "lunch" }] });
+    const v = run({ products: [{ variationId: 3002, confidence: 0.7, evidence: "lunch", quantity: null, quantityEvidence: null }] });
     expect(productFlags(v)[0].message).toBe('"Lunch": the model was only fairly sure (0.7)');
   });
 
   test("the same product twice is kept once", () => {
-    const one = { variationId: 3001, confidence: 1, evidence: "a meeting room" };
+    const one = { variationId: 3001, confidence: 1, evidence: "a meeting room", quantity: null, quantityEvidence: null };
     expect(run({ products: [one, one] }).products).toHaveLength(1);
   });
 

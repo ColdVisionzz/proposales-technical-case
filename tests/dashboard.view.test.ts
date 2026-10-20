@@ -62,7 +62,7 @@ describe("timeTaken", () => {
 });
 
 describe("booking", () => {
-  const withProducts = { ...clean(), products: [{ variationId: 1, confidence: 0.9, evidence: "lunch" }, { variationId: 99, confidence: 0.9, evidence: "x" }] };
+  const withProducts = { ...clean(), products: [{ variationId: 1, confidence: 0.9, evidence: "lunch", quantity: null, quantityEvidence: null }, { variationId: 99, confidence: 0.9, evidence: "x", quantity: null, quantityEvidence: null }] };
   const names = new Map([[1, "Lunch"]]);
 
   test("an id that is not in the catalog is dropped", () => {
@@ -70,9 +70,20 @@ describe("booking", () => {
     expect(b?.lines.map((l) => l.label)).toEqual(["Lunch"]);
   });
 
-  test("lunch is one per guest, like the real draft", () => {
+  test("lunch is one per guest per day (12-13 March: 2 days), like the real draft", () => {
     const b = booking({ ...withProducts, guests: { value: 12, confidence: 1, evidence: "12" } }, names);
-    expect(b?.lines[0]).toEqual({ label: "Lunch", quantity: 12 });
+    expect(b?.lines[0]).toEqual({ label: "Lunch", quantity: 24 });
+  });
+
+  test("a stated quantity is shown when it fits the booking, and ignored when it does not", () => {
+    const stated = (quantity: number) => ({ ...withProducts, guests: { value: 12, confidence: 1, evidence: "12" }, products: [{ ...withProducts.products[0], quantity, quantityEvidence: "5 of us" }] });
+    expect(booking(stated(5), names)?.lines[0].quantity).toBe(5);
+    expect(booking(stated(500), names)?.lines[0].quantity).toBe(24);
+  });
+
+  test("an extraction stored before quantities existed still gives a card", () => {
+    const old = { ...withProducts, products: [{ variationId: 1, confidence: 0.9, evidence: "lunch" }] };
+    expect(booking(old, names)?.lines).toHaveLength(1);
   });
 
   test("without a catalog the id is shown, nothing is hidden", () => {

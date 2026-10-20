@@ -18,7 +18,7 @@ const extraction: Extraction = {
   guests: { value: 24, confidence: 0.9, evidence: "24 people" },
   rooms: empty, nights: empty, language: { value: "en", confidence: 1, evidence: "need a meeting room" },
   budget: empty, specialRequests: empty,
-  products: [{ variationId: 3001, confidence: 0.9, evidence: "a meeting room" }],
+  products: [{ variationId: 3001, confidence: 0.9, evidence: "a meeting room", quantity: null, quantityEvidence: null }],
 };
 const good = { output: extraction, usage: { inputTokens: 100, outputTokens: 50 } } as never;
 const badOutput = () =>

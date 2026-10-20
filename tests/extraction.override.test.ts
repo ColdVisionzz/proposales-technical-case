@@ -46,13 +46,13 @@ describe("validate: a human-entered value (trusted mode)", () => {
   });
 
   test("a product that is not in the catalog is dropped even when a human typed it", () => {
-    const v = run({ products: [{ variationId: 999999, confidence: 1, evidence: HAND_EVIDENCE }] });
+    const v = run({ products: [{ variationId: 999999, confidence: 1, evidence: HAND_EVIDENCE, quantity: null, quantityEvidence: null }] });
     expect(v.products).toEqual([]);
     expect(flagsFor(v, "products").some((x) => x.level === "unsupported")).toBe(true);
   });
 
   test("a catalog product a human picked is kept without a quote", () => {
-    const v = run({ products: [{ variationId: 3001, confidence: 1, evidence: HAND_EVIDENCE }] });
+    const v = run({ products: [{ variationId: 3001, confidence: 1, evidence: HAND_EVIDENCE, quantity: null, quantityEvidence: null }] });
     expect(v.products.map((p) => p.variationId)).toEqual([3001]);
   });
 
@@ -82,7 +82,7 @@ describe("overrideProblems", () => {
   });
 
   test("a unknown product the human typed blocks", () => {
-    const problems = overrideProblems(run({ products: [{ variationId: 999999, confidence: 1, evidence: HAND_EVIDENCE }] }));
+    const problems = overrideProblems(run({ products: [{ variationId: 999999, confidence: 1, evidence: HAND_EVIDENCE, quantity: null, quantityEvidence: null }] }));
     expect(problems.join(" ")).toMatch(/products/);
   });
 });
@@ -99,7 +99,7 @@ describe("parseChanges", () => {
   test("products are a list of ids, each marked, duplicates removed", () => {
     expect(parseChanges({ products: [3001, 3001, 3002] })).toEqual({
       ok: true,
-      changes: { products: [3001, 3002].map((variationId) => ({ variationId, confidence: 1, evidence: HAND_EVIDENCE })) },
+      changes: { products: [3001, 3002].map((variationId) => ({ variationId, confidence: 1, evidence: HAND_EVIDENCE, quantity: null, quantityEvidence: null })) },
     });
   });
 

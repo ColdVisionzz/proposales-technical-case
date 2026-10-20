@@ -30,8 +30,8 @@ export function clean(overrides: Partial<Extraction> = {}): Extraction {
     budget: empty,
     specialRequests: empty,
     products: [
-      { variationId: 3001, confidence: 1, evidence: "a meeting room" },
-      { variationId: 3002, confidence: 1, evidence: "lunch" },
+      { variationId: 3001, confidence: 1, evidence: "a meeting room", quantity: null, quantityEvidence: null },
+      { variationId: 3002, confidence: 1, evidence: "lunch", quantity: null, quantityEvidence: null },
     ],
     ...overrides,
   };
