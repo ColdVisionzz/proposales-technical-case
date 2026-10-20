@@ -58,7 +58,9 @@ async function main() {
         if (result.status === "ok") {
           const v = validate(result.extraction, sample, catalog, EVAL_TODAY);
           quoteMisses += v.flags.filter((f) => f.message.startsWith(QUOTE_MISS)).length;
-          scores = score(sample.expect, v, decide(v).outcome);
+          const decision = decide(v);
+          scores = score(sample.expect, v, decision.outcome);
+          if (scores.outcome && !scores.outcome.pass) note = `why ${decision.outcome}: ${decision.reasons.join("; ")}`; // flags, not email text
         } else {
           scores = score(sample.expect, null, "invalid");
           note = "invalid output";

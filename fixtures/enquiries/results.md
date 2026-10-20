@@ -1,6 +1,6 @@
 # Eval results
 
-Prompt v3, today fixed at 2026-11-04, 19 samples, run 2026-10-20T13:37:12.237Z.
+Prompt v4, today fixed at 2026-11-04, 19 samples, run 2026-10-20T14:51:08.806Z.
 
 ## openai/gpt-5.4-nano
 
@@ -9,20 +9,20 @@ Prompt v3, today fixed at 2026-11-04, 19 samples, run 2026-10-20T13:37:12.237Z.
 | startDate | 94% (15/16) |
 | endDate | 100% (3/3) |
 | guests | 100% (16/16) |
-| products | 100% (13/13) |
+| products | 92% (12/13) |
 | language | 100% (15/15) |
-| outcome | 84% (16/19) |
+| outcome | 95% (18/19) |
 
-Samples fully correct: 79% (15/19). Quotes not found in the email: 1. Average 3.2 s and 2128 tokens per sample.
+Samples fully correct: 89% (17/19). Quotes not found in the email: 0. Average 2.9 s and 2232 tokens per sample.
 
 | Sample | Result | Detail |
 | --- | --- | --- |
 | about-guests | pass |  |
 | av-only | pass |  |
-| clean | FAIL | outcome: expected "draft", got "flagged_draft" |
-| conflicting-dates | FAIL | outcome: expected "draft", got "flagged_draft" |
+| clean | pass |  |
+| conflicting-dates | pass |  |
 | dinner-share | pass |  |
-| forwarded-thread | FAIL | outcome: expected "draft", got "flagged_draft" |
+| forwarded-thread | pass |  |
 | german | pass |  |
 | guest-typo | pass |  |
 | newsletter | pass |  |
@@ -32,7 +32,7 @@ Samples fully correct: 79% (15/19). Quotes not found in the email: 1. Average 3.
 | out-of-office | pass |  |
 | past-date | pass |  |
 | prompt-injection | pass |  |
-| relative-date | FAIL | startDate: expected "2026-11-06", got "2026-11-13" |
+| relative-date | FAIL | why flagged_draft: startDate: Short notice: the event starts in 2 day(s) |
 | swedish | pass |  |
 | vague | pass |  |
-| wedding-rooms | pass |  |
+| wedding-rooms | FAIL | products: expected [3003,3004], got [3004] |

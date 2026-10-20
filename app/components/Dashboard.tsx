@@ -10,10 +10,11 @@ import { EnquiryList } from "./EnquiryList";
 import { HealthBanner } from "./HealthBanner";
 import { CopyAddress } from "./CopyAddress";
 import { DemoIntro } from "./DemoIntro";
-import { Mark } from "./icons";
+import { GitHub, Mark } from "./icons";
 import { IdlePipeline, Pipeline } from "./Pipeline";
 import { ProposalPreview } from "./ProposalPreview";
 import { SweeperButton } from "./SweeperButton";
+import { Tip } from "./Tip";
 
 const INBOUND = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -59,17 +60,36 @@ export function Dashboard() {
         <HealthBanner health={health.data} chaos={list.data?.chaos ?? false} offline={list.stale} />
         <header className="topbar">
           <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-4 px-4 md:px-8">
-            <h1 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
-              <Mark className="h-6 w-6" />
-              Inbox to Draft
-            </h1>
+            <Tip label="Hotel enquiry emails become draft proposals" align="left">
+              <h1 className="flex items-center gap-2.5 text-[15px] font-semibold tracking-tight">
+                <Mark className="h-8 w-8" />
+                Inbox to Draft
+              </h1>
+            </Tip>
             <div className="flex min-w-0 items-center gap-4">
-              {INBOUND && <CopyAddress address={INBOUND} className="hidden sm:inline-flex" />}
+              {INBOUND && (
+                <Tip label="Email an enquiry here. Click to copy" className="hidden sm:flex">
+                  <CopyAddress address={INBOUND} className="inline-flex" />
+                </Tip>
+              )}
+              <Tip label="View source on GitHub">
+                <a
+                  href="https://github.com/ColdVisionzz/proposales-technical-case"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="View source on GitHub"
+                  className="press grid h-8 w-8 place-items-center rounded-lg border border-line-strong bg-surface text-muted hover:text-foreground"
+                >
+                  <GitHub className="h-4 w-4" />
+                </a>
+              </Tip>
               <SweeperButton />
-              <p className="label flex items-center gap-2 text-sm text-muted" role="status">
-                <span className={`h-1.5 w-1.5 rounded-full ${list.stale ? "bg-warn" : "animate-pulse bg-accent"}`} />
-                {list.stale ? "Reconnecting" : "Live"}
-              </p>
+              <Tip label={list.stale ? "Connection lost. Retrying" : "Updating automatically"}>
+                <p className="label flex items-center gap-2 text-sm text-muted" role="status">
+                  <span className={`h-1.5 w-1.5 rounded-full ${list.stale ? "bg-warn" : "animate-pulse bg-accent"}`} />
+                  {list.stale ? "Reconnecting" : "Live"}
+                </p>
+              </Tip>
             </div>
           </div>
         </header>
