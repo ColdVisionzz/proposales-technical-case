@@ -2,7 +2,7 @@ import { fetchEmailBody } from "../email/body";
 import { extract } from "../extraction/extract";
 import { schedule } from "../queue";
 import { withChaos } from "./chaos";
-import { getGateway } from "./gateway";
+import { getGateway } from "./proposales";
 import type { Deps } from "./process";
 
 // The real dependencies, built per call so a missing key shows up as an error on that call, not at import time.

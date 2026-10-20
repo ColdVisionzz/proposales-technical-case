@@ -42,7 +42,7 @@ describe("exhausted", () => {
   });
 });
 
-describe("classifyError: database errors (T12 finding 4)", () => {
+describe("classifyError: database errors", () => {
   test.each(["CONNECTION_CLOSED", "CONNECTION_DESTROYED", "CONNECT_TIMEOUT", "ECONNRESET", "57P01", "08006"])(
     "code %s is a retryable blip, not a permanent unknown",
     (code) => {
@@ -55,7 +55,7 @@ describe("classifyError: database errors (T12 finding 4)", () => {
   });
 });
 
-describe("fetchEmailBody timeout (T12 finding 6)", () => {
+describe("fetchEmailBody timeout", () => {
   test("a hung call becomes a retryable timeout instead of burning the lease", async () => {
     const failure = await fetchEmailBody("em_1", 20).catch((e) => e);
     expect(failure).toBeInstanceOf(GatewayError);

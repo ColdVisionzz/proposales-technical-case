@@ -1,4 +1,4 @@
-// The Proposales probe (task T3b). Asks the real API the questions we could only read about in the OpenAPI file,
+// The Proposales probe. Asks the real API the questions we could only read about in the OpenAPI file,
 // saves every answer under fixtures/proposales/real/, and writes probe-report.md with the answers and the places where
 // the real API disagrees with our synthetic fixtures. The real answer always wins.
 //
@@ -159,7 +159,7 @@ export async function runProbe(o: ProbeOptions): Promise<{ report: string; faile
   const reqA = fullRequest("with variation ids", keyA, "probe-a@example.com", variationIds);
   const reqB = fullRequest("with product ids", keyB, "probe-b@example.com", productIds);
 
-  if (items.length === 0) answers.push("**No products in the catalog**, so the drafts with products were skipped. Seed 3 to 5 products in the Proposales UI (task T1b) and run the probe again.");
+  if (items.length === 0) answers.push("**No products in the catalog**, so the drafts with products were skipped. Seed 3 to 5 products in the Proposales UI and run the probe again.");
   const createA = await call("POST", "/v3/proposals", { body: reqA });
   note("create-with-variation-ids", createA);
   save("create-proposal.request.json", reqA);

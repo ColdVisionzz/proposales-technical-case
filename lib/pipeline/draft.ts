@@ -1,7 +1,7 @@
 import { isDraftLevel } from "../extraction/decide";
 import { DEFAULT_LANGUAGE } from "../extraction/policy";
-import { resolveQuantity, ruleFor, stayOf } from "../extraction/quantity";
-import { dayNumber, type Flag, type Validated } from "../extraction/validate";
+import { dayNumber, localized, resolveQuantity, ruleFor, stayOf } from "../extraction/quantity";
+import type { Flag, Validated } from "../extraction/validate";
 import { ENQUIRY_KEY, type CatalogItem, type CreateDraftInput } from "../proposales/gateway";
 
 // "Anna Lindqvist <anna@x.com>" -> { name: "Anna Lindqvist", email: "anna@x.com" }. A bare address works too.
@@ -40,7 +40,7 @@ export function buildDraft({ enquiryKey, companyId, validated: v, flags, catalog
 
   const titleOf = (id: number) => {
     const item = catalog.find((c) => c.variation_id === id);
-    return item ? (item.title.en ?? Object.values(item.title)[0] ?? String(id)) : String(id);
+    return item ? (localized(item.title) || String(id)) : String(id);
   };
 
   const guests = v.guests.value as number; // decide() only lets a draft through with guests and a start date

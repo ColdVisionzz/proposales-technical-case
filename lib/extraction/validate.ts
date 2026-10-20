@@ -1,9 +1,8 @@
 import type { CatalogEntry, EmailInput } from "./extract";
 import { policy as defaultPolicy, type Policy } from "./policy";
-import { ceilingFor, dayNumber, stayOf } from "./quantity";
+import { ceilingFor, dayNumber, localized, stayOf } from "./quantity";
 import { HAND_EVIDENCE, type Extraction } from "./schema";
 
-export { dayNumber };
 
 // "unsupported": the model's value failed a check and was dropped (the claim is kept for the salesperson to see).
 // "check": the value is kept, but a human should look at it.
@@ -144,7 +143,7 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
   const catalogIds = new Set(catalog.map((c) => c.variation_id));
   const productName = (id: number) => {
     const item = catalog.find((c) => c.variation_id === id);
-    return item ? `"${item.title.en ?? Object.values(item.title)[0] ?? id}"` : String(id);
+    return item ? `"${localized(item.title) || id}"` : String(id);
   };
   const stay = stayOf(startDate.value, endDate.value, nights.value);
 
@@ -177,7 +176,7 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     else {
       if (confidence < policy.certain) flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: the model was only fairly sure (${confidence})`, claimed: product.variationId, evidence: product.evidence });
       const title = catalog.find((c) => c.variation_id === product.variationId)?.title;
-      const quantity = statedQuantity(product, title ? (title.en ?? Object.values(title)[0] ?? "") : "", byHand);
+      const quantity = statedQuantity(product, title ? localized(title) : "", byHand);
       products.push({ variationId: product.variationId, confidence, evidence: product.evidence, quantity });
     }
   }

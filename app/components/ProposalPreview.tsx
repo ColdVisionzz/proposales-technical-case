@@ -33,7 +33,7 @@ export function ProposalPreview({ enquiry: e, detail, names, now, onOpen }: Prop
             <ArrowUpRight className="h-4 w-4" />
           </a>
         ) : (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-medium text-muted" aria-disabled="true">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-line px-4 py-2 text-sm font-medium text-muted">
             Open proposal
           </span>
         )}

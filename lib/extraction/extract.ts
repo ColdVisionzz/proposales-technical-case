@@ -1,4 +1,5 @@
 import { generateText, NoObjectGeneratedError, Output } from "ai";
+import { localized } from "./quantity";
 import { extractionSchema, type Extraction } from "./schema";
 
 export const PROMPT_VERSION = "v4";
@@ -21,8 +22,6 @@ export type ExtractMeta = {
 export type ExtractResult =
   | { status: "ok"; extraction: Extraction; meta: ExtractMeta }
   | { status: "invalid"; reason: string; meta: ExtractMeta };
-
-const localized = (text: Record<string, string>) => text.en ?? Object.values(text)[0] ?? "";
 
 export function buildSystemPrompt(catalog: CatalogEntry[], today: string) {
   const products = catalog.map((c) => `- variation_id ${c.variation_id}: ${localized(c.title)}. ${localized(c.description)}`).join("\n");

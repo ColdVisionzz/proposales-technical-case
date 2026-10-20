@@ -3,8 +3,7 @@ import { editExtraction } from "@/lib/db/enquiries";
 import { maskDeep } from "@/lib/db/mask";
 import { getEnquiryDetail } from "@/lib/db/enquiry-views";
 import { parseChanges } from "@/lib/extraction/edit";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/lib/uuid";
 
 // A human edit: only the fields the user changed (`{ version, changes: { guests: 40 } }`), checked against the version
 // the editor last saw. The server merges them into the stored extraction, so masked text on screen is never written back.
@@ -12,7 +11,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // the current row so the screen can show the difference.
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  if (!UUID.test(id)) return Response.json({ error: "id must be a uuid" }, { status: 400 });
+  if (!isUuid(id)) return Response.json({ error: "id must be a uuid" }, { status: 400 });
 
   const input = await request.json().catch(() => null);
   const version = input?.version;
@@ -30,7 +29,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   await connection();
   const { id } = await params;
-  if (!UUID.test(id)) return Response.json({ error: "id must be a uuid" }, { status: 400 });
+  if (!isUuid(id)) return Response.json({ error: "id must be a uuid" }, { status: 400 });
   try {
     const detail = await getEnquiryDetail(id);
     if (!detail) return Response.json({ error: "not found" }, { status: 404 });

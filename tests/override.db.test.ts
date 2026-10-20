@@ -14,7 +14,7 @@ vi.mock("next/server", async (importOriginal) => ({
 }));
 vi.mock("../lib/queue", () => ({ nudge: vi.fn(async () => {}) }));
 // The create-anyway route reads the catalog through the shared gateway; the test gives it the sample catalog.
-vi.mock("../lib/pipeline/gateway", async () => {
+vi.mock("../lib/pipeline/proposales", async () => {
   const { createFakeGateway } = await import("../lib/proposales/fake");
   const { catalog } = await import("./extraction.fixtures");
   return { getGateway: () => createFakeGateway(catalog).gateway };

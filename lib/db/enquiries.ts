@@ -166,7 +166,7 @@ export async function finishDraft(id: string, attempt: number, draft: { uuid: st
     WHERE id = ${id} AND status = 'processing' AND attempts = ${attempt}`);
 }
 
-// Retryable failure: park the row. Nothing wakes it until its time has passed and something nudges or sweeps (T15).
+// Retryable failure: park the row. Nothing wakes it until its time has passed and something nudges or sweeps.
 export async function parkRetrying(id: string, attempt: number, error: string, delaySeconds: number): Promise<void> {
   guard(await db()`
     UPDATE enquiries
@@ -185,7 +185,7 @@ export async function failPermanent(id: string, attempt: number, error: string):
 
 // Manual retry: a human re-queues a row that gave up. One statement, and only from failed_permanent, so a second press
 // or a press on a healthy row changes nothing. Resets the try count, never the ticket: `attempts` is left alone so a
-// ticket number is never handed out twice and a stalled old worker still cannot write (T12 finding 1).
+// ticket number is never handed out twice and a stalled old worker still cannot write.
 export async function retryEnquiry(id: string): Promise<{ ok: true } | { ok: false; status: string | null }> {
   const sql = db();
   const [updated] = await sql`
@@ -206,7 +206,7 @@ export type CurrentEnquiry = { status: string; version: number; extracted: unkno
 // The status check sits in the same statement, so a human edit can never race a running worker: only needs_review rows
 // are editable, and no worker touches those.
 // Zero rows: the version is stale, the row is not editable now, or the id does not exist. The caller gets the current row.
-// The edit carries only the fields the user changed (T19). They are merged into the stored extraction inside the same
+// The edit carries only the fields the user changed. They are merged into the stored extraction inside the same
 // statement (`||` replaces whole top-level fields), so everything the user did not touch keeps its real, unmasked text.
 // A row the model produced nothing for (invalid output) has no extraction yet: it starts from an all-unknown one.
 type EditResult = { ok: true; version: number } | { ok: false; current: CurrentEnquiry | null };

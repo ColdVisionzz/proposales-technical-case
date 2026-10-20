@@ -348,7 +348,7 @@ describe("the same text sent again never creates a second draft", () => {
     expect(await sql`SELECT 1 FROM enquiries WHERE dedupe_cleared`).toHaveLength(1);
   });
 
-  // Found by T16: the check used two separate statements ("is there a finished draft?", then "is anyone still working?").
+  // Found by a concurrency test: the check used two separate statements ("is there a finished draft?", then "is anyone still working?").
   // A copy that finished between them was counted as neither, and the next copy created a second draft. The window is a
   // few milliseconds wide, so one run rarely hits it: this repeats the race. Fixed by asking both questions in one statement.
   test("five copies at once, repeated: never a second draft, even when a copy finishes mid-check", async () => {
@@ -517,7 +517,7 @@ describe("failures", () => {
   });
 });
 
-// ---- T14: backoff, Retry-After and the attempt cap, one test per failure-matrix row --------------------------------------
+// ---- backoff, Retry-After and the attempt cap, one test per failure-matrix row --------------------------------------
 
 describe("retries and the cap", () => {
   // Pretend the row has already been tried n - 1 times, so the next claim is try number n.
@@ -580,7 +580,7 @@ describe("retries and the cap", () => {
     expect((await row(id)).next_attempt_at).toBeNull();
   });
 
-  test("a database blip mid-pipeline is retryable, not a permanent unknown (T12 finding 4)", async () => {
+  test("a database blip mid-pipeline is retryable, not a permanent unknown", async () => {
     const id = await addPaste();
     const blip = vi.fn(async () => {
       throw Object.assign(new Error("connection closed"), { code: "CONNECTION_CLOSED" });
@@ -596,7 +596,7 @@ describe("retries and the cap", () => {
   });
 });
 
-// ---- T15b: a parked row asks for a delayed wake-up ------------------------------------------------------------------
+// ---- a parked row asks for a delayed wake-up ------------------------------------------------------------------
 
 describe("the delayed wake-up", () => {
   const dueIn = async (id: string) =>
@@ -669,7 +669,7 @@ describe("the delayed wake-up", () => {
   });
 });
 
-// ---- T16: the process dies after Proposales created the draft and before our row learns about it -------------------------
+// ---- the process dies after Proposales created the draft and before our row learns about it -------------------------
 // The one window where the outside world and our database disagree. A test cannot kill a process, so a hook throws
 // SimulatedCrash and processEnquiry lets it through its catch: nothing after it runs and nothing is saved, as in a real crash.
 
@@ -746,7 +746,7 @@ describe("crash after create", () => {
   });
 });
 
-// ---- T16: the watchdog. A crash runs no code, so a dead worker cannot ask for its own retry ---------------------------
+// ---- the watchdog. A crash runs no code, so a dead worker cannot ask for its own retry ---------------------------
 
 describe("the watchdog", () => {
   const dies = { afterCreate: () => { throw new SimulatedCrash("after create"); } };
@@ -805,7 +805,7 @@ describe("the watchdog", () => {
   });
 });
 
-// ---- T17: the chaos demo, and the timeline of events --------------------------------------------------------------------
+// ---- the chaos demo, and the timeline of events --------------------------------------------------------------------
 
 describe("the chaos demo", () => {
   test("switch on: the row parks as retrying and asks for a wake-up; switch off: the wake-up produces the draft by itself", async () => {

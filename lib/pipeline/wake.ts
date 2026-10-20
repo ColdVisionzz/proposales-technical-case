@@ -1,4 +1,4 @@
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/lib/uuid";
 
 // What the queue consumer does with a delayed message: run the pipeline for that enquiry. The route supplies `run`.
 // A message that does not carry a uuid is dropped quietly: redelivering it cannot fix it, and it would only cost
@@ -6,7 +6,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 // queue redelivers (the trigger caps deliveries). Duplicate and stale messages are harmless: the claim decides.
 export async function wake(message: unknown, run: (id: string) => Promise<unknown>): Promise<void> {
   const id = typeof message === "object" && message !== null ? (message as { id?: unknown }).id : undefined;
-  if (typeof id !== "string" || !UUID.test(id)) {
+  if (!isUuid(id)) {
     console.error("retry consumer: dropped a message without a valid id");
     return;
   }

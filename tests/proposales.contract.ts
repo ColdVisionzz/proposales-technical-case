@@ -4,7 +4,7 @@ import { describe, expect, test } from "vitest";
 import type { CreateDraftInput, ProposalesGateway } from "@/lib/proposales/gateway";
 
 // Behaviour every ProposalesGateway must have. Run it against the fake now and the real client
-// later (T8b). Not a *.test.ts file, so vitest only runs it where a test file calls it.
+// later. Not a *.test.ts file, so vitest only runs it where a test file calls it.
 // Only behaviour the real API also has belongs here. Search lag is not covered: against the real
 // API a find right after create may need a short wait first.
 const request = JSON.parse(

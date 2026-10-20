@@ -205,7 +205,7 @@ describe("PATCH /api/enquiries/[id]", () => {
   });
 });
 
-// ---- the attempt cap and manual retry (T14) ----------------------------------------------------------------------
+// ---- the attempt cap and manual retry ----------------------------------------------------------------------
 
 const expireLease = (id: string) => sql`UPDATE enquiries SET locked_until = now() - interval '1 second' WHERE id = ${id}`;
 
@@ -217,7 +217,7 @@ describe("crashes count toward the cap", () => {
       await expireLease(id);
     }
     expect(await claimEnquiry(id, MAX_TRIES)).toBeNull(); // out of tries, so no sixth run
-    expect(await row(id)).toMatchObject({ status: "processing", tries: MAX_TRIES, attempts: MAX_TRIES }); // left for the sweeper (T15)
+    expect(await row(id)).toMatchObject({ status: "processing", tries: MAX_TRIES, attempts: MAX_TRIES }); // left for the sweeper
   });
 });
 
@@ -235,7 +235,7 @@ describe("manual retry", () => {
     expect(await claimEnquiry(id, MAX_TRIES)).toMatchObject({ attempt: 2, tries: 1 }); // ticket 2: ticket 1 is never reused
   });
 
-  test("a stale worker still cannot write after a manual retry (T12 finding 1)", async () => {
+  test("a stale worker still cannot write after a manual retry", async () => {
     const id = await addPaste();
     const stale = (await claimEnquiry(id, MAX_TRIES))!; // worker A, ticket 1, then it stalls
     await expireLease(id);

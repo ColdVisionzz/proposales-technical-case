@@ -1,6 +1,6 @@
 // The one place that decides whether an external failure is worth retrying.
 // Nothing here stores anything: the pipeline reads the Failure and writes status, attempts,
-// next_attempt_at and last_error (T14).
+// next_attempt_at and last_error.
 //
 // What goes wrong                      -> Failure
 // ------------------------------------------------------------------------------------------

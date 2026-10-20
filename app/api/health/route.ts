@@ -1,5 +1,5 @@
 import { withChaos } from "@/lib/pipeline/chaos";
-import { getGateway } from "@/lib/pipeline/gateway";
+import { getGateway } from "@/lib/pipeline/proposales";
 import { checkHealth } from "@/lib/pipeline/health";
 
 // Is Proposales reachable? Read-only for callers: the answer is the last ping, refreshed at most once a minute

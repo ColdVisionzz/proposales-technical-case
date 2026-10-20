@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 // Every extracted value carries how sure the model is and the exact words that back it up.
-// Code checks the words against the email later (T10); a quote that is not found means "unknown".
+// Code checks the words against the email later; a quote that is not found means "unknown".
 // No min/max here on purpose: not every provider accepts them in a structured-output schema, so code checks ranges.
 const field = <T extends z.ZodType>(value: T) =>
   z.object({
@@ -44,7 +44,7 @@ export const extractionSchema = z.object({
 
 export type Extraction = z.infer<typeof extractionSchema>;
 
-// What a human-edited field carries as its evidence (T19). validate() honours it only on a row with override set, so a
+// What a human-edited field carries as its evidence. validate() honours it only on a row with override set, so a
 // model (or a hostile email talking to it) that writes these words gains nothing.
 export const HAND_EVIDENCE = "(entered by hand)";
 

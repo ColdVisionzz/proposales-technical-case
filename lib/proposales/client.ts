@@ -4,7 +4,7 @@ import { ENQUIRY_KEY, type CatalogItem, type CreateDraftInput, type Draft, type 
 
 // The real Proposales client. Request and response shapes come from fixtures/proposales/openapi.json and the answers
 // the probe recorded in fixtures/proposales/real/. Every failure leaves here as a GatewayError, classified by errors.ts.
-// The client never retries: the queue and its backoff decide that (T14).
+// The client never retries: the queue and its backoff decide that.
 //
 // Facts the probe measured (2026-10-19) that shape this file:
 // - POST /v3/proposals is not idempotent. The caller must search first.

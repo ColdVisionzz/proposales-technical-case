@@ -2,11 +2,10 @@ import { after } from "next/server";
 import { bearerMatches } from "@/lib/auth";
 import { productionDeps } from "@/lib/pipeline/deps";
 import { processEnquiry } from "@/lib/pipeline/process";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isUuid } from "@/lib/uuid";
 
 // Just under the 2 minute lease (claimEnquiry). The platform kills the function before another worker may take the row
-// over, so a stalled worker cannot keep running past its lease (T12 finding 5). The worst chain (body fetch, catalog,
+// over, so a stalled worker cannot keep running past its lease. The worst chain (body fetch, catalog,
 // two model tries, search, create) waits about 100 s. Next's docs: after() runs for the route's configured max duration.
 export const maxDuration = 110;
 
@@ -27,7 +26,7 @@ export async function POST(request: Request) {
     return new Response("unauthorized", { status: 401 });
   }
   const input = await request.json().catch(() => null);
-  if (typeof input?.id !== "string" || !UUID.test(input.id)) {
+  if (!isUuid(input?.id)) {
     return Response.json({ error: "id must be a uuid" }, { status: 400 });
   }
   const id: string = input.id;

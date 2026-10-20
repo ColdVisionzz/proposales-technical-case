@@ -8,6 +8,9 @@ export function dayNumber(text: string): number | null {
   return real ? date.getTime() / 86_400_000 : null;
 }
 
+// A catalog text in English, else the first language there is.
+export const localized = (text: Record<string, string>) => text.en ?? Object.values(text)[0] ?? "";
+
 // How many of a product to put in the draft. The API's catalog says nothing about units, so we keep the rule here.
 //   one             a single item (anything not listed below)
 //   per_day         one per event day (meeting room, AV package: catalog unit "day")
@@ -16,7 +19,7 @@ export function dayNumber(text: string): number | null {
 // Keyed by the English product title, not the id: ids differ from account to account, the seeded titles do not.
 // ponytail: a renamed product silently falls back to "one". Key by a custom field if hotels rename their products.
 export type QuantityRule = "one" | "per_day" | "per_guest_day" | "per_room_night";
-export const QUANTITY_RULES: Record<string, QuantityRule> = {
+const QUANTITY_RULES: Record<string, QuantityRule> = {
   lunch: "per_guest_day",
   dinner: "per_guest_day",
   "hotel room": "per_room_night",

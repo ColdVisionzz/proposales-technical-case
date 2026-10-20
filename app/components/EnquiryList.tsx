@@ -7,7 +7,7 @@ import { StatusChip } from "./StatusChip";
 
 // The box keeps one size on wide screens, empty or full: a long list scrolls inside it instead of stretching the page.
 // Below lg it only caps its height, so a short list does not leave a hollow box and a touch scroll cannot get trapped.
-export const BOX = "max-h-[28rem] min-h-64 lg:h-[32rem] lg:max-h-none";
+const BOX = "max-h-[28rem] min-h-64 lg:h-[32rem] lg:max-h-none";
 
 // Every enquiry, newest first. Clicking a row opens its drawer. The draft link is its own link, so it is one click from the list.
 export function EnquiryList({ rows, now, focusId, onSelect, onHover }: { rows: EnquirySummary[]; now: number; focusId: string | null; onSelect: (id: string) => void; onHover?: (id: string) => void }) {

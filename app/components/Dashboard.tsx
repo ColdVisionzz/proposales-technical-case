@@ -5,6 +5,7 @@ import { useMemo, useState } from "react";
 import type { EnquiryDetail, EnquirySummary } from "@/lib/db/enquiry-views";
 import { useNow, usePoll } from "@/lib/dashboard/hooks";
 import type { Health } from "@/lib/pipeline/health";
+import { isUuid } from "@/lib/uuid";
 import { EnquiryDrawer } from "./EnquiryDrawer";
 import { EnquiryList } from "./EnquiryList";
 import { HealthBanner } from "./HealthBanner";
@@ -17,14 +18,13 @@ import { SweeperButton } from "./SweeperButton";
 import { Tip } from "./Tip";
 
 const INBOUND = process.env.NEXT_PUBLIC_INBOUND_ADDRESS || "";
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Owns the polling and the one piece of shared state: which enquiry is open, kept in the URL (?id=) so it can be linked
 // and the Back button closes the drawer. The hero shows that enquiry, or the newest one.
 export function Dashboard() {
   const router = useRouter();
   const param = useSearchParams().get("id");
-  const selectedId = param && UUID.test(param) ? param : null;
+  const selectedId = isUuid(param) ? param : null;
 
   const now = useNow();
   const list = usePoll<{ enquiries: EnquirySummary[]; chaos: boolean }>("/api/enquiries", 2000);
