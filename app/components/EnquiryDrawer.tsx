@@ -6,6 +6,7 @@ import { extractionSchema } from "@/lib/extraction/schema";
 import { explainError, highlight, stepLabel, timeTaken } from "@/lib/dashboard/view";
 import { ArrowUpRight, Close } from "./icons";
 import { RetryButton } from "./RetryButton";
+import { ReviewEditor } from "./ReviewEditor";
 import { StatusChip } from "./StatusChip";
 
 type Props = { open: boolean; detail: EnquiryDetail | null; names: Map<number, string> | null; now: number; onClose: () => void };
@@ -150,6 +151,9 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
           </pre>
         </section>
 
+        {d.status === "needs_review" ? (
+          <ReviewEditor key={d.id} detail={d} names={names} link={link} />
+        ) : (
         <section>
           <Heading>What the AI read</Heading>
           {x ? (
@@ -187,6 +191,7 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
             <p className="rounded-xl border border-line bg-background p-4 text-sm text-muted">Nothing extracted yet.</p>
           )}
         </section>
+        )}
       </div>
 
       <section>

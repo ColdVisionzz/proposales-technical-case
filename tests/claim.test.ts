@@ -17,7 +17,8 @@ vi.mock("../lib/queue", () => ({ nudge: vi.fn(async () => {}) }));
 
 import { PATCH } from "../app/api/enquiries/[id]/route";
 import { POST as retryRoute } from "../app/api/enquiries/[id]/retry/route";
-import { claimEnquiry, editExtraction, failPermanent, insertEnquiry, LostLeaseError, retryEnquiry, saveBody } from "../lib/db/enquiries";
+import { claimEnquiry, createAnyway, editExtraction, failPermanent, insertEnquiry, LostLeaseError, retryEnquiry, saveBody } from "../lib/db/enquiries";
+import { HAND_EVIDENCE } from "../lib/extraction/schema";
 import { MAX_TRIES } from "../lib/pipeline/retry";
 import { clean, email } from "./extraction.fixtures";
 
@@ -67,28 +68,50 @@ describe("the claim under load", () => {
 
 // ---- Guarantee 3: version-checked human edits ---------------------------------------------------------------------
 
+// A changed field as the server builds it from a save (see parseChanges).
+const byHand = (value: unknown) => ({ value, confidence: 1, evidence: HAND_EVIDENCE });
+// A row waiting for a human, with the model's extraction already saved.
+const inReview = async (extracted: unknown = clean()) => {
+  const id = await addPaste();
+  await sql`UPDATE enquiries SET status = 'needs_review', extracted = ${sql.json(extracted as never)} WHERE id = ${id}`;
+  return id;
+};
+
 describe("editExtraction", () => {
-  test("a current-version edit saves and bumps the version", async () => {
+  test("a current-version edit merges the changed field, bumps the version and leaves the rest alone", async () => {
+    const id = await inReview();
+    expect(await editExtraction(id, { guests: byHand(40) }, 0)).toEqual({ ok: true, version: 1 });
+    expect(await row(id)).toMatchObject({ version: 1, extracted: clean({ guests: byHand(40) as never }) });
+  });
+
+  test("untouched fields keep their real text, so a masked address on screen never reaches the database", async () => {
+    const real = "Call anna.berg@acme.com after 5";
+    const id = await inReview(clean({ specialRequests: { value: real, confidence: 1, evidence: real } }));
+    await editExtraction(id, { guests: byHand(40) }, 0); // the screen showed a***@acme.com, but only guests was sent
+    expect((await row(id)).extracted.specialRequests.value).toBe(real);
+  });
+
+  test("a row the model produced nothing for starts from an all-unknown extraction", async () => {
     const id = await addPaste();
     await setStatus(id, "needs_review");
-    expect(await editExtraction(id, clean(), 0)).toEqual({ ok: true, version: 1 });
-    expect(await row(id)).toMatchObject({ version: 1, extracted: clean() });
+    await editExtraction(id, { guests: byHand(40) }, 0);
+    const saved = (await row(id)).extracted;
+    expect(saved.guests).toEqual(byHand(40));
+    expect(saved.startDate).toEqual({ value: null, confidence: 0, evidence: null });
+    expect(saved.products).toEqual([]);
   });
 
   test("a stale version changes nothing and returns the current row", async () => {
-    const id = await addPaste();
-    await setStatus(id, "needs_review");
-    await editExtraction(id, clean(), 0); // someone else saved first: version is now 1
-    const edit = clean({ guests: { value: 99, confidence: 1, evidence: "99" } as never });
-    const result = await editExtraction(id, edit, 0); // this editor still thinks version 0
-    expect(result).toMatchObject({ ok: false, current: { status: "needs_review", version: 1, extracted: clean() } });
-    expect(await row(id)).toMatchObject({ version: 1, extracted: clean() });
+    const id = await inReview();
+    await editExtraction(id, { guests: byHand(30) }, 0); // someone else saved first: version is now 1
+    const result = await editExtraction(id, { guests: byHand(99) }, 0); // this editor still thinks version 0
+    expect(result).toMatchObject({ ok: false, current: { status: "needs_review", version: 1 } });
+    expect((await row(id)).extracted.guests).toEqual(byHand(30));
   });
 
   test("two edits at the same version at the same moment: exactly one wins", async () => {
-    const id = await addPaste();
-    await setStatus(id, "needs_review");
-    const results = await Promise.all(Array.from({ length: 10 }, () => editExtraction(id, clean(), 0)));
+    const id = await inReview();
+    const results = await Promise.all(Array.from({ length: 10 }, (_, n) => editExtraction(id, { guests: byHand(n + 1) }, 0)));
     expect(results.filter((r) => r.ok)).toHaveLength(1);
     expect((await row(id)).version).toBe(1);
   });
@@ -98,10 +121,39 @@ describe("editExtraction", () => {
     async (status) => {
       const id = await addPaste();
       await setStatus(id, status);
-      expect(await editExtraction(id, clean(), 0)).toMatchObject({ ok: false, current: { status, version: 0 } });
+      expect(await editExtraction(id, { guests: byHand(40) }, 0)).toMatchObject({ ok: false, current: { status, version: 0 } });
       expect(await row(id)).toMatchObject({ version: 0, extracted: null });
     },
   );
+});
+
+describe("createAnyway", () => {
+  test("queues the row with override set, a fresh try count and an untouched ticket", async () => {
+    const id = await inReview();
+    await sql`UPDATE enquiries SET tries = 3, attempts = 3, last_error = 'x', next_attempt_at = now() WHERE id = ${id}`;
+    expect(await createAnyway(id, 0)).toEqual({ ok: true, version: 1 });
+    expect(await row(id)).toMatchObject({ status: "queued", override: true, version: 1, tries: 0, attempts: 3, last_error: null, next_attempt_at: null });
+  });
+
+  test("a stale version queues nothing", async () => {
+    const id = await inReview();
+    await editExtraction(id, { guests: byHand(40) }, 0);
+    expect(await createAnyway(id, 0)).toMatchObject({ ok: false, current: { status: "needs_review", version: 1 } });
+    expect(await row(id)).toMatchObject({ status: "needs_review", override: false });
+  });
+
+  test("ten presses at the same moment: exactly one wins", async () => {
+    const id = await inReview();
+    const results = await Promise.all(Array.from({ length: 10 }, () => createAnyway(id, 0)));
+    expect(results.filter((r) => r.ok)).toHaveLength(1);
+  });
+
+  test.each(["queued", "processing", "retrying", "draft_created", "failed_permanent", "ignored"])("a %s row cannot be released", async (status) => {
+    const id = await addPaste();
+    await setStatus(id, status);
+    expect(await createAnyway(id, 0)).toMatchObject({ ok: false, current: { status } });
+    expect((await row(id)).override).toBe(false);
+  });
 });
 
 // ---- PATCH /api/enquiries/[id] -----------------------------------------------------------------------------------
@@ -111,33 +163,43 @@ const patch = (id: string, body: unknown) =>
 const MISSING = "0b9f4c2e-6d1a-4f4e-9a52-3c1d2e7a8b90";
 
 describe("PATCH /api/enquiries/[id]", () => {
-  test("200 with the new version", async () => {
-    const id = await addPaste();
-    await setStatus(id, "needs_review");
-    const res = await patch(id, { extracted: clean(), version: 0 });
+  test("200 with the new version, and the change is stored as entered by hand", async () => {
+    const id = await inReview();
+    const res = await patch(id, { changes: { guests: 40 }, version: 0 });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ version: 1 });
+    expect((await row(id)).extracted.guests).toEqual(byHand(40));
+  });
+
+  test("null clears a field", async () => {
+    const id = await inReview();
+    await patch(id, { changes: { guests: null }, version: 0 });
+    expect((await row(id)).extracted.guests).toEqual({ value: null, confidence: 0, evidence: null });
   });
 
   test("409 with the current data when the version is stale, and nothing is overwritten", async () => {
-    const id = await addPaste();
-    await setStatus(id, "needs_review");
-    await patch(id, { extracted: clean(), version: 0 });
-    const res = await patch(id, { extracted: clean(), version: 0 });
+    const id = await inReview();
+    await patch(id, { changes: { guests: 30 }, version: 0 });
+    const res = await patch(id, { changes: { guests: 99 }, version: 0 });
     expect(res.status).toBe(409);
-    expect(await res.json()).toMatchObject({ error: "conflict", current: { status: "needs_review", version: 1, extracted: clean() } });
-    expect((await row(id)).version).toBe(1);
+    expect(await res.json()).toMatchObject({ error: "conflict", current: { status: "needs_review", version: 1 } });
+    expect((await row(id)).extracted.guests).toEqual(byHand(30));
   });
 
   test("404 for an unknown id", async () => {
-    expect((await patch(MISSING, { extracted: clean(), version: 0 })).status).toBe(404);
+    expect((await patch(MISSING, { changes: { guests: 40 }, version: 0 })).status).toBe(404);
   });
 
   test.each([
-    ["an id that is not a uuid", "nope", { extracted: clean(), version: 0 }],
-    ["a missing version", MISSING, { extracted: clean() }],
-    ["a fractional version", MISSING, { extracted: clean(), version: 0.5 }],
-    ["an extraction that does not fit the schema", MISSING, { extracted: { nonsense: true }, version: 0 }],
+    ["an id that is not a uuid", "nope", { changes: { guests: 40 }, version: 0 }],
+    ["a missing version", MISSING, { changes: { guests: 40 } }],
+    ["a fractional version", MISSING, { changes: { guests: 40 }, version: 0.5 }],
+    ["no changes", MISSING, { version: 0 }],
+    ["empty changes", MISSING, { changes: {}, version: 0 }],
+    ["a field that does not exist", MISSING, { changes: { nonsense: 1 }, version: 0 }],
+    ["a field that cannot be edited", MISSING, { changes: { isEnquiry: false }, version: 0 }],
+    ["a value of the wrong type", MISSING, { changes: { guests: "forty" }, version: 0 }],
+    ["products that are not ids", MISSING, { changes: { products: ["lunch"] }, version: 0 }],
   ])("400 for %s", async (_name, id, body) => {
     expect((await patch(id, body)).status).toBe(400);
   });

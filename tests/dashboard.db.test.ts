@@ -99,7 +99,7 @@ describe("email addresses never leave the server", () => {
     const list = await (await getList()).text();
     const detail = await (await getDetail(new Request("http://x"), { params: Promise.resolve({ id }) })).text();
     const patch = await (
-      await patchEnquiry(new Request("http://x", { method: "PATCH", body: JSON.stringify({ version: 99, extracted: clean() }) }), { params: Promise.resolve({ id }) })
+      await patchEnquiry(new Request("http://x", { method: "PATCH", body: JSON.stringify({ version: 99, changes: { guests: 40 } }) }), { params: Promise.resolve({ id }) })
     ).text();
 
     for (const text of [list, detail, patch]) expect(leaks(text)).toEqual([]);

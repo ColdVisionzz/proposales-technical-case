@@ -1,6 +1,6 @@
 import type { CatalogEntry, EmailInput } from "./extract";
 import { policy as defaultPolicy, type Policy } from "./policy";
-import type { Extraction } from "./schema";
+import { HAND_EVIDENCE, type Extraction } from "./schema";
 
 // "unsupported": the model's value failed a check and was dropped (the claim is kept for the salesperson to see).
 // "check": the value is kept, but a human should look at it.
@@ -61,7 +61,10 @@ const positiveInt = (n: number) => Number.isInteger(n) && n >= 1;
 const numberInQuote = (n: number, quote: string) =>
   new RegExp(`(?<!\\d)${n}(?!\\d)`).test(quote.replace(/(?<=\d)[\s,.](?=\d{3}(?!\d))/g, ""));
 
-export function validate(extraction: Extraction, email: Pick<EmailInput, "subject" | "body">, catalog: CatalogEntry[], today: string, policy: Policy = defaultPolicy): Validated {
+// `trusted` is true only for a row a human released with "create draft anyway": fields they typed (marked with
+// HAND_EVIDENCE) skip the evidence and confidence checks, which cannot apply to a person. Every rule about the world
+// (real dates, order, future, guest range, catalog ids) still runs on them, and untouched model fields are checked as before.
+export function validate(extraction: Extraction, email: Pick<EmailInput, "subject" | "body">, catalog: CatalogEntry[], today: string, policy: Policy = defaultPolicy, trusted = false): Validated {
   const todayDay = dayNumber(today);
   if (todayDay === null) throw new Error(`today must be YYYY-MM-DD, got ${today}`);
   const emailNorm = normalise(`${email.subject}\n${email.body}`);
@@ -79,9 +82,10 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
   function field<T extends string | number>(
     name: string,
     raw: Raw<T>,
-    opts: { critical?: boolean; reject?: (value: T) => string | null; warn?: (value: T, evidence: string) => string[] } = {},
+    opts: { critical?: boolean; reject?: (value: T) => string | null; warn?: (value: T, evidence: string, byHand: boolean) => string[] } = {},
   ): Checked<T> {
-    const confidence = clamp(raw.confidence);
+    const byHand = trusted && raw.evidence === HAND_EVIDENCE;
+    const confidence = byHand ? 1 : clamp(raw.confidence);
     const out: Checked<T> = { value: null, claimed: raw.value, confidence, evidence: raw.evidence };
     if (raw.value === null) return out; // nothing claimed, nothing to check (decide() reports missing critical fields)
     const drop = (message: string) => {
@@ -90,7 +94,7 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     };
     const check = (message: string) => flags.push({ field: name, level: "check", message, claimed: raw.value, evidence: raw.evidence });
 
-    if (!evidenceFound(raw.evidence, emailNorm)) return drop("The words the model quoted for this are not in the email");
+    if (!byHand && !evidenceFound(raw.evidence, emailNorm)) return drop("The words the model quoted for this are not in the email");
     const rejected = opts.reject?.(raw.value);
     if (rejected) return drop(rejected);
     if (confidence < policy.examine) {
@@ -99,7 +103,7 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     } else if (confidence < policy.certain) {
       check(`The model was only fairly sure about this (${confidence})`);
     }
-    for (const message of opts.warn?.(raw.value, raw.evidence as string) ?? []) check(message);
+    for (const message of opts.warn?.(raw.value, raw.evidence as string, byHand) ?? []) check(message);
     out.value = raw.value;
     return out;
   }
@@ -126,9 +130,9 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
   const guests = field("guests", extraction.guests, {
     critical: true,
     reject: (n) => (positiveInt(n) && n <= policy.maxGuests ? null : `A guest count must be a whole number from 1 to ${policy.maxGuests}`),
-    warn: (n, evidence) => [
+    warn: (n, evidence, byHand) => [
       ...(n > policy.largeGroup ? [`Very large group (${n} guests)`] : []),
-      ...(numberInQuote(n, evidence) ? [] : ["The guest number does not appear as digits in the quoted words"]),
+      ...(byHand || numberInQuote(n, evidence) ? [] : ["The guest number does not appear as digits in the quoted words"]),
     ],
   });
 
@@ -148,10 +152,11 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
   const products: Validated["products"] = [];
   for (const product of extraction.products) {
     const drop = (message: string) => flags.push({ field: "products", level: "unsupported", message, claimed: product.variationId, evidence: product.evidence });
-    const confidence = clamp(product.confidence);
+    const byHand = trusted && product.evidence === HAND_EVIDENCE;
+    const confidence = byHand ? 1 : clamp(product.confidence);
     if (!catalogIds.has(product.variationId)) drop("The model picked a product that is not in the catalog, so it was left out");
     else if (products.some((p) => p.variationId === product.variationId)) continue;
-    else if (!evidenceFound(product.evidence, emailNorm)) drop(`${productName(product.variationId)} left out: its quoted words are not in the email`);
+    else if (!byHand && !evidenceFound(product.evidence, emailNorm)) drop(`${productName(product.variationId)} left out: its quoted words are not in the email`);
     else if (confidence < policy.examine) drop(`${productName(product.variationId)} left out: the model was not confident enough (${confidence})`);
     else {
       if (confidence < policy.certain) flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: the model was only fairly sure (${confidence})`, claimed: product.variationId, evidence: product.evidence });

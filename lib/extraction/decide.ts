@@ -1,4 +1,5 @@
 import { draftLevelFields } from "./policy";
+import { HAND_EVIDENCE } from "./schema";
 import type { Flag, Validated } from "./validate";
 
 export type Outcome = "ignored" | "needs_review" | "flagged_draft" | "draft";
@@ -26,4 +27,13 @@ export function decide(v: Validated): Decision {
   const important = v.flags.filter(isDraftLevel);
   if (important.length) return { outcome: "flagged_draft", reasons: important.map((f) => `${f.field}: ${f.message}`) };
   return { outcome: "draft", reasons: [] };
+}
+
+// Under "create draft anyway" the outcome decision is skipped, but a draft still needs the two critical fields, and a
+// value the human typed must not break a hard rule (a past date, an unknown product). Returns what blocks the draft.
+export function overrideProblems(v: Validated): string[] {
+  const d = decide(v);
+  const missing = d.outcome === "needs_review" ? d.reasons : [];
+  const typed = v.flags.filter((f) => f.level === "unsupported" && f.evidence === HAND_EVIDENCE).map((f) => `${f.field}: ${f.message}`);
+  return [...new Set([...missing, ...typed])];
 }

@@ -35,3 +35,25 @@ export const extractionSchema = z.object({
 });
 
 export type Extraction = z.infer<typeof extractionSchema>;
+
+// What a human-edited field carries as its evidence (T19). validate() honours it only on a row with override set, so a
+// model (or a hostile email talking to it) that writes these words gains nothing.
+export const HAND_EVIDENCE = "(entered by hand)";
+
+// An extraction with every field unknown: the starting point when a human fills in a row the model produced nothing for.
+const unknown = { value: null, confidence: 0, evidence: null };
+export const emptyExtraction: Extraction = {
+  isEnquiry: true,
+  contactName: unknown,
+  company: unknown,
+  eventType: unknown,
+  startDate: unknown,
+  endDate: unknown,
+  guests: unknown,
+  rooms: unknown,
+  nights: unknown,
+  language: unknown,
+  budget: unknown,
+  specialRequests: unknown,
+  products: [],
+};

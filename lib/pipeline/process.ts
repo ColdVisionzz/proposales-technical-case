@@ -10,7 +10,7 @@ import {
   saveExtraction,
 } from "../db/enquiries";
 import { readableBody, truncateEmail, MAX_EMAIL_CHARS } from "../email/text";
-import { decide } from "../extraction/decide";
+import { decide, overrideProblems } from "../extraction/decide";
 import type { extract as extractFn } from "../extraction/extract";
 import { extractionSchema } from "../extraction/schema";
 import { validate, type Flag } from "../extraction/validate";
@@ -58,7 +58,8 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
       await saveBody(id, attempt, body);
       await log("body_fetched", "ok");
     }
-    if (!body.trim()) {
+    // A released row with no readable text is fine: the human filled in the fields. (fingerprintOf gives null for an empty body.)
+    if (!body.trim() && !row.override) {
       const reasons = ["The email has no readable text"];
       await finishWithoutDraft(id, attempt, "needs_review", { flags: [], reasons });
       await log("done", "needs_review: no readable text");
@@ -110,12 +111,18 @@ export async function processEnquiry(id: string, deps: Deps): Promise<Result> {
     }
 
     // 4. Validate and decide. Pure and free, so recomputed on every attempt.
-    const validated = validate(extraction, email, catalog, today);
+    // A row released with "create draft anyway" skips the outcome decision: a human vouched for it. What they typed is
+    // trusted for evidence and confidence only; the hard rules and the two critical fields still have to hold.
+    const validated = validate(extraction, email, catalog, today, undefined, row.override);
     const flags: Flag[] = cut.truncated
       ? [...validated.flags, { field: "email", level: "check", message: `The email is very long: only the first ${MAX_EMAIL_CHARS} characters were read` }]
       : validated.flags;
-    const decision = decide({ ...validated, flags });
-    await log("decided", decision.outcome);
+    let decision = decide({ ...validated, flags });
+    if (row.override) {
+      const problems = overrideProblems({ ...validated, flags });
+      decision = problems.length ? { outcome: "needs_review", reasons: problems } : { outcome: "flagged_draft", reasons: [] };
+    }
+    await log("decided", row.override ? `${decision.outcome} (override)` : decision.outcome);
     if (decision.outcome === "ignored" || decision.outcome === "needs_review") {
       await finishWithoutDraft(id, attempt, decision.outcome, { flags, reasons: decision.reasons });
       await log("done", decision.outcome);

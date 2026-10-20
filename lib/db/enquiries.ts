@@ -1,3 +1,5 @@
+import type { Changes } from "../extraction/edit";
+import { emptyExtraction } from "../extraction/schema";
 import { db } from "./client";
 import { recordEvent } from "./events";
 
@@ -41,6 +43,7 @@ export type ClaimedEnquiry = {
   attempt: number; // the fencing token: every later write must present this exact value. Never resets.
   tries: number; // claims since the last manual reset, this one included: what the attempt cap reads
   dedupeCleared: boolean; // this row already won the right to create a draft, so the fingerprint step is skipped
+  override: boolean; // a human released this row with "create draft anyway": skip the outcome decision, trust what they typed
 };
 
 // Guarantee 2: one atomic statement decides who owns the row. Never a SELECT followed by an UPDATE.
@@ -60,7 +63,7 @@ export async function claimEnquiry(id: string, maxTries: number): Promise<Claime
       AND ( status = 'queued'
             OR (status = 'retrying' AND next_attempt_at <= now())
             OR (status = 'processing' AND locked_until < now()) )
-    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts, tries, dedupe_cleared`;
+    RETURNING id, source, email_id, raw_subject, raw_body, sender, extracted, attempts, tries, dedupe_cleared, override`;
   if (!row) return null;
   return {
     id: row.id,
@@ -73,6 +76,7 @@ export async function claimEnquiry(id: string, maxTries: number): Promise<Claime
     attempt: row.attempts,
     tries: row.tries,
     dedupeCleared: row.dedupe_cleared,
+    override: row.override,
   };
 }
 
@@ -202,18 +206,45 @@ export type CurrentEnquiry = { status: string; version: number; extracted: unkno
 // The status check sits in the same statement, so a human edit can never race a running worker: only needs_review rows
 // are editable, and no worker touches those.
 // Zero rows: the version is stale, the row is not editable now, or the id does not exist. The caller gets the current row.
-export async function editExtraction(
-  id: string,
-  extracted: unknown,
-  version: number,
-): Promise<{ ok: true; version: number } | { ok: false; current: CurrentEnquiry | null }> {
+// The edit carries only the fields the user changed (T19). They are merged into the stored extraction inside the same
+// statement (`||` replaces whole top-level fields), so everything the user did not touch keeps its real, unmasked text.
+// A row the model produced nothing for (invalid output) has no extraction yet: it starts from an all-unknown one.
+type EditResult = { ok: true; version: number } | { ok: false; current: CurrentEnquiry | null };
+
+export async function editExtraction(id: string, changes: Changes, version: number): Promise<EditResult> {
   const sql = db();
   const [updated] = await sql`
     UPDATE enquiries
-    SET extracted = ${sql.json(extracted as never)}, version = version + 1, updated_at = now()
+    SET extracted = COALESCE(extracted, ${sql.json(emptyExtraction as never)}) || ${sql.json(changes as never)},
+        version = version + 1, updated_at = now()
     WHERE id = ${id} AND version = ${version} AND status = 'needs_review'
     RETURNING version`;
   if (updated) return { ok: true, version: updated.version };
-  const [current] = await sql`SELECT status, version, extracted FROM enquiries WHERE id = ${id}`;
-  return { ok: false, current: current ? { status: current.status, version: current.version, extracted: current.extracted } : null };
+  return { ok: false, current: await currentOf(id) };
+}
+
+// "Create draft anyway": one statement checks the version the human saw and the status, then hands the row back to the
+// queue with the override flag. tries goes back to 0 (a human decision is a fresh start), attempts is never touched, so a
+// ticket number is not handed out twice (same rule as manual retry).
+export async function createAnyway(id: string, version: number): Promise<EditResult> {
+  const sql = db();
+  const [updated] = await sql`
+    UPDATE enquiries
+    SET override = true, status = 'queued', version = version + 1, tries = 0,
+        locked_until = NULL, next_attempt_at = NULL, last_error = NULL, updated_at = now()
+    WHERE id = ${id} AND version = ${version} AND status = 'needs_review'
+    RETURNING version`;
+  if (updated) return { ok: true, version: updated.version };
+  return { ok: false, current: await currentOf(id) };
+}
+
+async function currentOf(id: string): Promise<CurrentEnquiry | null> {
+  const [current] = await db()`SELECT status, version, extracted FROM enquiries WHERE id = ${id}`;
+  return current ? { status: current.status, version: current.version, extracted: current.extracted } : null;
+}
+
+// What the create-anyway route checks before queueing: the email text and the stored extraction, at one version.
+export async function getForOverride(id: string): Promise<{ status: string; version: number; extracted: unknown; subject: string; body: string } | null> {
+  const [row] = await db()`SELECT status, version, extracted, raw_subject, raw_body FROM enquiries WHERE id = ${id}`;
+  return row ? { status: row.status, version: row.version, extracted: row.extracted, subject: row.raw_subject ?? "", body: row.raw_body ?? "" } : null;
 }
