@@ -1,0 +1,11 @@
+{
+  "from": "sam@bluewave.example.com",
+  "subject": "Conference for 40",
+  "body": "Hello, BlueWave is planning a conference for 40 people sometime in the autumn. We will need a meeting room. Can you tell us what you offer?\n\nSam Ortiz",
+  "expect": {
+    "startDate": null,
+    "guests": 40,
+    "language": "en",
+    "outcome": "needs_review"
+  }
+}

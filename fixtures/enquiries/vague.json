@@ -1,5 +1,12 @@
 {
   "from": "mark.d@example.com",
   "subject": "Event",
-  "body": "Hello, we are thinking about doing something at your hotel with our group sometime this year. Can you send prices?\n\nMark"
+  "body": "Hello, we are thinking about doing something at your hotel with our group sometime this year. Can you send prices?\n\nMark",
+  "expect": {
+    "startDate": null,
+    "guests": null,
+    "language": "en",
+    "products": [],
+    "outcome": "needs_review"
+  }
 }

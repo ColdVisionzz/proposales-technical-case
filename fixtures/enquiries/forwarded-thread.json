@@ -1,0 +1,14 @@
+{
+  "from": "pa@oakline.example.com",
+  "subject": "Fwd: dinner for our partners",
+  "body": "Hi hotel team, my boss asked me to forward this to you. Please reply to him directly.\n\n---------- Forwarded message ----------\nFrom: Tom Reed <tom.reed@oakline.example.com>\nDate: Mon, 2 Nov 2026\nSubject: Partner dinner\n\nCan we book a three-course dinner for 30 partners on 9 September 2027? Please send a proposal.\n\nTom Reed\nOakline Partners",
+  "expect": {
+    "startDate": "2027-09-09",
+    "guests": 30,
+    "language": "en",
+    "products": [
+      3004
+    ],
+    "outcome": "draft"
+  }
+}

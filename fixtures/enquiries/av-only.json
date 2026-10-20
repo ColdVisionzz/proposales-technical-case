@@ -1,0 +1,14 @@
+{
+  "from": "events@summit.example.com",
+  "subject": "AV for a talk on 20 January",
+  "body": "Hello, we are hosting a talk on 20 January 2027 for 80 people in our own venue and need a projector, screen, microphones and a technician from you.\n\nSummit Events",
+  "expect": {
+    "startDate": "2027-01-20",
+    "guests": 80,
+    "language": "en",
+    "products": [
+      3005
+    ],
+    "outcome": "draft"
+  }
+}

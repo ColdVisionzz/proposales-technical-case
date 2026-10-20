@@ -1,0 +1,8 @@
+{
+  "from": "lisa@vendor.example.com",
+  "subject": "Automatic reply: Re: your quote",
+  "body": "I am out of the office until 15 November 2026 with limited access to email. For urgent matters contact the front desk.\n\nLisa",
+  "expect": {
+    "outcome": "ignored"
+  }
+}

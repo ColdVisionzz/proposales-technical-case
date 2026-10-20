@@ -1,0 +1,16 @@
+{
+  "from": "amy.fox@example.com",
+  "subject": "Wedding weekend 17-19 September",
+  "body": "Dear hotel,\n\nWe are planning our wedding weekend from 17 to 19 September 2027 for 60 guests. We would like 30 hotel rooms and a three-course dinner on the Saturday.\n\nWarm regards,\nAmy Fox",
+  "expect": {
+    "startDate": "2027-09-17",
+    "endDate": "2027-09-19",
+    "guests": 60,
+    "language": "en",
+    "products": [
+      3003,
+      3004
+    ],
+    "outcome": "draft"
+  }
+}

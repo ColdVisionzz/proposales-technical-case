@@ -1,0 +1,15 @@
+{
+  "from": "katrin.vogel@example.de",
+  "subject": "Anfrage Tagung im April",
+  "body": "Guten Tag,\n\nwir planen eine Tagung für 25 Personen am 15. April 2027 und brauchen einen Tagungsraum und Mittagessen.\n\nMit freundlichen Grüßen\nKatrin Vogel, Vogel GmbH",
+  "expect": {
+    "startDate": "2027-04-15",
+    "guests": 25,
+    "language": "de",
+    "products": [
+      3001,
+      3002
+    ],
+    "outcome": "draft"
+  }
+}

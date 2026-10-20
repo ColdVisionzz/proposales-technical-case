@@ -1,0 +1,8 @@
+{
+  "from": "news@travelweekly.example.com",
+  "subject": "This week in hospitality: 10 trends for 2027",
+  "body": "Hi there,\n\nYour weekly roundup is here. Read about 10 hotel trends, a new booking tool and our spring conference on 3 March 2027. Unsubscribe at any time.\n\nThe Travel Weekly team",
+  "expect": {
+    "outcome": "ignored"
+  }
+}

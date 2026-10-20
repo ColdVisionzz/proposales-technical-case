@@ -1,0 +1,11 @@
+{
+  "from": "rob@example.com",
+  "subject": "Team day",
+  "body": "Hi, can we book a meeting room and lunch for 15 people on 5 March 2026?\n\nRob",
+  "expect": {
+    "startDate": null,
+    "guests": 15,
+    "language": "en",
+    "outcome": "needs_review"
+  }
+}

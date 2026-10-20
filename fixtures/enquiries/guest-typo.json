@@ -1,0 +1,10 @@
+{
+  "from": "max@example.com",
+  "subject": "Party",
+  "body": "Hello, we would like to host a party on 1 July 2027 for 1,500 people. Do you have space?\n\nMax",
+  "expect": {
+    "startDate": "2027-07-01",
+    "guests": null,
+    "outcome": "needs_review"
+  }
+}

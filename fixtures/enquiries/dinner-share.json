@@ -1,0 +1,14 @@
+{
+  "from": "hanna@northpeak.example.com",
+  "subject": "Team dinner 3 March",
+  "body": "Hi, our team of 12 is visiting on 3 March 2027. Dinner for 5 of us please, the rest will eat elsewhere.\n\nHanna, NorthPeak",
+  "expect": {
+    "startDate": "2027-03-03",
+    "guests": 12,
+    "language": "en",
+    "products": [
+      3004
+    ],
+    "outcome": "draft"
+  }
+}

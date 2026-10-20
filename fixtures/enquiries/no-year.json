@@ -1,0 +1,14 @@
+{
+  "from": "eva@fjord.example.com",
+  "subject": "Christmas lunch",
+  "body": "Hi! We would like a Christmas lunch on 12 December for 18 people.\n\nEva, Fjord AS",
+  "expect": {
+    "startDate": "2026-12-12",
+    "guests": 18,
+    "language": "en",
+    "products": [
+      3002
+    ],
+    "outcome": "draft"
+  }
+}

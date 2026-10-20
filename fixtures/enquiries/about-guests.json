@@ -1,0 +1,15 @@
+{
+  "from": "kim@lumen.example.com",
+  "subject": "Workshop 10 February",
+  "body": "Hi, we want a meeting room with lunch on 10 February 2027 for about 40 people.\n\nKim Lund, Lumen",
+  "expect": {
+    "startDate": "2027-02-10",
+    "guests": 40,
+    "language": "en",
+    "products": [
+      3001,
+      3002
+    ],
+    "outcome": "draft"
+  }
+}

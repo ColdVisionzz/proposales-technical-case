@@ -1,0 +1,14 @@
+{
+  "from": "ops@harbor.example.com",
+  "subject": "Board retreat in June",
+  "body": "Hello,\n\nOur board retreat is on 14 June 2027 for 12 people. We need a meeting room for the day.\n\nSorry, I mixed up the calendar. The retreat is on 21 June 2027, not the 14th. Everything else stays the same.\n\nThanks,\nLena Berg, Harbor Capital",
+  "expect": {
+    "startDate": "2027-06-21",
+    "guests": 12,
+    "language": "en",
+    "products": [
+      3001
+    ],
+    "outcome": "draft"
+  }
+}
