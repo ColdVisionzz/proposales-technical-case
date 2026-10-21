@@ -18,7 +18,27 @@
 
 > [!NOTE]
 > **This is a public demo.** Anyone can open it and anyone can email the inbound address, by design.
-> Email **addresses** are masked everywhere they appear (`a***@domain.com`), and a row is visible for 15 minutes after its last change. **The rest of an email is not masked:** opening a row shows its body as plain text, including any names, companies or phone numbers in it, so **do not send real personal data to this demo**. LLM spend is capped at **$5 per month** in the Vercel AI Gateway. Nothing is ever sent to a customer: the system only creates **drafts**.
+> Email **addresses** are masked everywhere they appear (`a***@domain.com`), and a finished row stays visible for 15 minutes after its last change (rows still queued, processing or retrying stay visible until they settle). **The rest of an email is not masked:** opening a row shows its body as plain text, including any names, companies or phone numbers in it, so **do not send real personal data to this demo**. LLM spend is capped at **$5 per month** in the Vercel AI Gateway. Nothing is ever sent to a customer: the system only creates **drafts**.
+
+## Reviewer summary
+
+**What it is.** Email in, draft proposal out. The model reads the email; plain code validates every field and decides the outcome; a human sends the draft.
+
+**How it meets the brief**
+
+| The brief asks for | What happens | Where to read | Proven by |
+| --- | --- | --- | --- |
+| An LLM that is unsure or wrong | Every field needs a confidence and an exact quote from the email. Bad quotes, bad dates and invented product ids are dropped. Missing dates or guests go to a review queue | [What the model decides](#what-the-model-decides-and-what-it-does-not) | `tests/extraction.*.test.ts`, [eval](#evaluation-of-the-extraction) |
+| Errors, retries, the other side down | One function sorts every error into retryable or permanent. Retries back off for just over an hour, then the row waits for a human | [When things go wrong](#when-things-go-wrong) | `tests/retry.test.ts`, `tests/proposales.client.test.ts`, live chaos switch |
+| Running twice, no duplicates | Five layers, from the webhook `message_id` down to a search at Proposales before every create | [Duplicates](#duplicates-one-enquiry-one-draft) | `tests/pipeline.test.ts` |
+| Two requests changing the same thing | Workers: one conditional `UPDATE` claim with a lease and a fencing token. Humans: a version column and a 409 | [Concurrency](#concurrency-two-requests-changing-the-same-thing) | `tests/claim.test.ts`, `tests/override.db.test.ts` |
+
+**Weakest points** (details in [known limits](#known-limits-and-weaknesses)):
+
+- Three narrow situations can still produce a second draft.
+- "Next Friday" is misread by the model; the short-notice flag catches it, code does not fix it.
+- The extraction eval is 19 samples written by me, one run each.
+- It is an open demo: do not send real personal data.
 
 ## Contents
 
@@ -67,24 +87,24 @@ The interesting part is not the happy path. It is deciding what to do when the m
 ## How it works
 
 ```mermaid
-flowchart LR
+flowchart TD
     A[Enquiry email] --> B[Resend inbound]
-    B -->|signed webhook| C["POST /api/inbound<br/>verify signature, insert row"]
-    C -->|"ON CONFLICT (message_id)<br/>DO NOTHING"| D[(Postgres<br/>enquiries)]
-    C -->|"after(): nudge"| E["POST /api/worker"]
-    E --> F["processEnquiry"]
-    F -->|"1 atomic claim"| D
-    F --> G["2 fetch body"]
-    G --> H["3 extract (LLM,<br/>structured output)"]
-    H --> I["4 validate in code"]
-    I --> J["5 decide"]
-    J -->|"draft / flagged draft"| K["6 search by enquiry_key,<br/>then create"]
-    K --> L[Proposales draft]
-    J -->|"missing or unsure"| M[Review queue]
-    J -->|"not an enquiry"| N[Ignored]
-    F -.->|"retryable error"| Q["Vercel Queues<br/>delayed retry"]
-    Q --> F
-    S["Daily sweeper"] -.-> F
+    B -->|signed webhook| C[POST api/inbound]
+    C -->|insert, ignore duplicates| D[(Postgres enquiries)]
+    C -->|nudge after response| E[POST api/worker]
+    E --> F[processEnquiry]
+    F --> G[1 claim row atomically]
+    G --> H[2 fetch email body]
+    H --> I[3 extract with LLM]
+    I --> J[4 validate in code]
+    J --> K[5 decide outcome]
+    K -->|draft or flagged draft| L[6 search by enquiry_key then create]
+    L --> M[Proposales draft]
+    K -->|missing or unsure| N[Review queue]
+    K -->|not an enquiry| O[Ignored]
+    F -.->|retryable error| P[Vercel Queues delayed retry]
+    P -.-> F
+    Q[Daily sweeper] -.-> F
 ```
 
 **The flow, in plain words**
@@ -158,10 +178,7 @@ Everything else the model returns (company, budget, notes) is stored and shown b
 
 **Prompt injection.** The email is wrapped in a delimiter, the closing delimiter inside the email is neutralised, and the model has no tools, so there is nothing for an injected instruction to call. The worst a hostile email can do is produce odd field values, which the checks above then reject or flag. There is an injection sample in the eval set.
 
-**Which model.** `openai/gpt-5.4-nano` through the Vercel AI Gateway, chosen on cost and speed (about 2.9 s and 2,200 tokens per email). Set it with `EXTRACTION_MODEL`.
-
-> [!WARNING]
-> The built-in default in [`lib/extraction/extract.ts`](lib/extraction/extract.ts) is `anthropic/claude-haiku-4.5`, which my gateway tier rejected and which I have **not** evaluated. The model I evaluated and deployed is the one above. If you run this yourself, set `EXTRACTION_MODEL` explicitly.
+**Which model.** `openai/gpt-5.4-nano` through the Vercel AI Gateway, chosen on cost and speed (about 2.9 s and 2,200 tokens per email). It is the default in [`lib/extraction/extract.ts`](lib/extraction/extract.ts); override it with `EXTRACTION_MODEL`.
 
 ## When things go wrong
 
@@ -181,15 +198,16 @@ Every external failure is classified in **one function** ([`lib/proposales/error
 | Bad webhook signature | Rejected | 401, nothing stored |
 | Worker crashes mid-run | Recovered | Lease expires, watchdog and sweeper reclaim the row |
 | A queue message is lost | Recovered | Daily sweeper nudges stuck rows |
-| Proposales down for hours | Degraded gracefully | Health pings flip a banner; rows keep retrying; nothing is lost |
+| Proposales down for less than about an hour | Recovered | Rows retry with backoff and drafts appear once it is back |
+| Proposales down for longer | Degraded, nothing lost | Retries stop after the 5-try cap (just over an hour). Rows become `failed_permanent` with the reason saved, the health banner shows, and a human presses **Retry now** on each row once Proposales is back |
 
-**Retries.** Backoff is 30 s, 2 min, 10 min, then 1 h, with ±10% jitter so a recovery does not stampede. The cap is 5 tries (3 for model errors). After the cap the row is `failed_permanent`, the reason is on the row, and a human can press **Retry now** (which resets the try counter only).
+**Retries.** Backoff is 30 s, 2 min, 10 min, then 1 h, with ±10% jitter so a recovery does not stampede. The cap is 5 tries (3 for model errors). The five tries span a little over an hour (30 s + 2 min + 10 min + 1 h of waiting). After the cap the row is `failed_permanent`, the reason is on the row, and a human can press **Retry now** (which resets the try counter only). A longer outage therefore needs one manual click per stranded row; there is no automatic long-outage mode.
 
 **How retries are driven.** A retryable failure first *parks* the row (`status = retrying`, `next_attempt_at` set), and only then enqueues a delayed Vercel Queues message to wake it. The order matters: if the message is lost, the row is already safely parked and the sweeper finds it. Every claim also schedules a *watchdog* message just after the lease would expire, so a crashed worker's row is picked up in about two minutes, not at the next cron run.
 
 **The sweeper** ([`lib/pipeline/sweeper.ts`](lib/pipeline/sweeper.ts)) runs daily (Vercel cron) and from a **Retry stuck enquiries** button. It fails rows that have crashed repeatedly, and nudges up to 10 stuck rows per run. It is idempotent: running it twice is harmless.
 
-**Health.** A cheap, rate-limited ping (at most once per 60 s) tracks whether Proposales is reachable. Two failed pings mean "down" and show a banner; an auth failure shows the banner at once.
+**Health.** A cheap, rate-limited ping (at most once per 60 s) tracks whether Proposales is reachable. Two failed pings mean "down" and show a banner; an auth failure shows the banner at once. The banner is information only: it does not pause or extend retries.
 
 **A chaos switch** lets me prove the above on demand. It makes the Proposales client fail on purpose, and is a presenter tool (bearer-protected, no UI):
 
@@ -307,7 +325,7 @@ npm run typecheck
 
 The samples cover: a clean request, a vague one, no dates, no year, a past date, conflicting dates, a typo in the guest count, a forwarded thread, German and Swedish emails, a dinner for a share of the guests, a wedding with rooms, an AV-only request, a newsletter, an out-of-office, a non-enquiry, and a prompt-injection attempt.
 
-**Prompt v4, `openai/gpt-5.4-nano`, 19 samples**
+**Prompt v4, `openai/gpt-5.4-nano`, 19 samples** (the deployed prompt is v5, which only changes the quantity rule; the eval was not re-run)
 
 | Field | Pass rate |
 | --- | --- |
@@ -430,7 +448,7 @@ npm run dev
 | `PROPOSALES_API_KEY`, `PROPOSALES_COMPANY_ID` | Proposales access. With no key, a local in-memory fake is used (development convenience only) |
 | `PROPOSALES_BASE_URL` | Optional override of the API base URL |
 | `AI_GATEWAY_API_KEY` | Vercel AI Gateway (read by the AI SDK itself) |
-| `EXTRACTION_MODEL` | Gateway model id. Set it explicitly (see the warning above) |
+| `EXTRACTION_MODEL` | Optional gateway model id. Defaults to `openai/gpt-5.4-nano` |
 
 | Command | What it does |
 | --- | --- |

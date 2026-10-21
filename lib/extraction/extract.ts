@@ -3,8 +3,8 @@ import { localized } from "./quantity";
 import { extractionSchema, type Extraction } from "./schema";
 
 export const PROMPT_VERSION = "v5";
-// Gateway model id. Unverified until the first eval run; override with EXTRACTION_MODEL.
-export const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
+// Gateway model id, the one the eval set was scored on. Override with EXTRACTION_MODEL.
+export const DEFAULT_MODEL = "openai/gpt-5.4-nano";
 const TIMEOUT_MS = 25_000;
 
 export type EmailInput = { subject: string; body: string; sender?: string };
