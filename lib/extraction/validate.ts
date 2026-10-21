@@ -1,6 +1,6 @@
 import type { CatalogEntry, EmailInput } from "./extract";
 import { policy as defaultPolicy, type Policy } from "./policy";
-import { ceilingFor, dayNumber, localized, stayOf } from "./quantity";
+import { ceilingFor, dayNumber, localized, ruleFor, stayOf } from "./quantity";
 import { HAND_EVIDENCE, type Extraction } from "./schema";
 
 
@@ -38,6 +38,7 @@ export function normalise(text: string): string {
     .replace(/[‘’‛]/g, "'")
     .replace(/[“”]/g, '"')
     .replace(/[‐-―−]/g, "-")
+    .replace(/[*_`]/g, "") // markdown emphasis: models drop or move it inside a quote
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -158,6 +159,8 @@ export function validate(extraction: Extraction, email: Pick<EmailInput, "subjec
     if (!positiveInt(quantity)) return flag("it is not a whole number of at least 1"), null;
     if (!evidenceFound(quantityEvidence, emailNorm)) return flag("its quoted words are not in the email"), null;
     const ceiling = ceilingFor(title, { guests: guests.value, rooms: rooms.value, stay });
+    // "2 rooms" is rooms per night, not room-nights: the default rule multiplies by the nights.
+    if (ruleFor(title) === "per_room_night" && quantity === rooms.value) return null;
     if (quantity > ceiling) return flag(`more than the booking can hold (${ceiling})`), null;
     if (!numberInQuote(quantity, quantityEvidence as string)) {
       flags.push({ field: "products", level: "check", message: `${productName(product.variationId)}: quantity ${quantity} was worked out by the model, check it`, claimed: quantity, evidence: quantityEvidence });

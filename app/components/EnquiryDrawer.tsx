@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import type { EnquiryDetail } from "@/lib/db/enquiry-views";
+import { stayOf } from "@/lib/extraction/quantity";
 import { extractionSchema } from "@/lib/extraction/schema";
 import { explainError, highlight, stepLabel, timeTaken } from "@/lib/dashboard/view";
 import { ArrowUpRight, Close } from "./icons";
@@ -160,12 +161,14 @@ function Body({ detail: d, names }: { detail: EnquiryDetail; names: Map<number, 
             <dl className="divide-y divide-line overflow-hidden rounded-xl border border-line">
               {FIELDS.map(([label, key]) => {
                 const f = x[key];
+                // The model leaves nights empty unless the email states them; the draft counts them from the dates.
+                const derived = key === "nights" && f.value === null ? stayOf(x.startDate.value, x.endDate.value, null).nights : null;
                 return (
                   <div key={key} className="row-ev px-4 py-2.5" {...link(key)}>
                     <div className="flex items-baseline justify-between gap-3">
                       <dt className="text-sm text-muted">{label}</dt>
-                      <dd className={`text-right text-sm font-medium ${f.value === null ? "text-muted" : ""}`}>
-                        {f.value === null ? "Not stated" : String(f.value)}
+                      <dd className={`text-right text-sm font-medium ${f.value === null && derived === null ? "text-muted" : ""}`}>
+                        {derived !== null ? `${derived} (from the dates)` : f.value === null ? "Not stated" : String(f.value)}
                         {f.value !== null && <span className="num ml-2 text-xs font-normal text-muted">{Math.round(f.confidence * 100)}%</span>}
                       </dd>
                     </div>

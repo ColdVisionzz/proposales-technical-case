@@ -178,6 +178,17 @@ describe("stated product quantities", () => {
     expect(flagTexts(v)).toEqual([]);
   });
 
+  test("a hotel room count equal to the rooms is per night, so it is dropped and the nights multiply it", () => {
+    const rooms = { rooms: f(12, "12 people"), products: [{ variationId: 3003, confidence: 1, evidence: "hotel", quantity: 12, quantityEvidence: "12 people" }] };
+    expect(run(rooms, { ...email, body: `${email.body} 12 people` }).products[0].quantity).toBeNull();
+  });
+
+  test("a quote that moves markdown emphasis marks still matches the email", () => {
+    const em = { ...email, body: `${email.body}\n   - *Lunch *` };
+    const v = run({ products: [{ variationId: 3002, confidence: 1, evidence: "* Lunch *", quantity: null, quantityEvidence: null }] }, em);
+    expect(v.products.map((p) => p.variationId)).toEqual([3002]);
+  });
+
   test("a quote that is not in the email drops the quantity (the default applies) and says so", () => {
     const v = run(dinner(5, "only 5 of us want dinner"));
     expect(v.products[0].quantity).toBeNull();

@@ -2,7 +2,7 @@ import { generateText, NoObjectGeneratedError, Output } from "ai";
 import { localized } from "./quantity";
 import { extractionSchema, type Extraction } from "./schema";
 
-export const PROMPT_VERSION = "v4";
+export const PROMPT_VERSION = "v5";
 // Gateway model id. Unverified until the first eval run; override with EXTRACTION_MODEL.
 export const DEFAULT_MODEL = "anthropic/claude-haiku-4.5";
 const TIMEOUT_MS = 25_000;
@@ -36,7 +36,7 @@ Rules:
 - Dates are ISO YYYY-MM-DD. Today is ${today}. Resolve relative dates from today. "Next <weekday>" means that weekday in the following calendar week (Monday to Sunday), not the nearest one: if today is Wednesday 2026-11-04, "next Friday" is 2026-11-13. The evidence is the original phrase.
 - endDate: set it only when the email states an end date, a date range, or a number of days or nights. For a single-day event ("just the one day", "for the day") or when no end is stated, set endDate value null, confidence 0 and evidence null. Never guess or copy the start date.
 - products: choose only from the catalog below, by variation_id, and only what the email asks for. If nothing fits, return an empty list. Never invent an id.
-- quantity: set it only when the email states how many of that product are wanted, or what share of the guests or days (for example "dinner for 5 of us", "lunch on Monday and Wednesday only"). It is the TOTAL units for the whole event, so lunch for 10 guests on 2 days is 20. quantityEvidence is the exact words that state it. When the email gives no such count, set both to null: the system works out the usual amount itself.
+- quantity: set it only when the email states how many of that product are wanted, or what share of the guests or days (for example "dinner for 5 of us", "lunch on Monday and Wednesday only"). It is the TOTAL units for the whole event, so lunch for 10 guests on 2 days is 20. quantityEvidence is the exact words that state it. A count written next to a product ("Projector: 1") or a single date for it ("Meeting room, 23-10-2026" means 1 unit) states it too. Hotel rooms are the exception: leave quantity null, the system multiplies rooms by nights. When the email gives no such count, set both to null: the system works out the usual amount itself.
 
 Catalog:
 ${products || "(empty)"}`;
